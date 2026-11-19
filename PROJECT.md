@@ -1027,6 +1027,8 @@ GitLab Push
   → Smoke test
 ```
 
+SCM authority for this project is the in-cluster GitLab service (`gitlab.rmwhs.com`) and its registry (`registry.rmwhs.com`).
+
 Frontend is built independently and deployed only after API contracts pass. Database migrations run before application rollout and must be backward-compatible for rolling deployments.
 
 ## 9.3 Local Deployment
@@ -1169,19 +1171,19 @@ Implementation is divided into controlled, session-sized phases. No phase begins
 
 ## Phase 0 — Workspace and Cluster Foundation
 
-- [ ] Confirm repository ownership and GitLab remote
+- [x] Confirm SCM platform is in-cluster GitLab (`gitlab.rmwhs.com`)
 - [x] Define namespace, registry, ingress, and deploy SA
 - [x] Add `.gitlab-ci.yml` skeleton and Kaniko/buildah scripts
 - [x] Create local Docker Compose dependencies
 - [x] Add environment variable templates
 - [x] Add Infisical/Kubernetes Secret references
-- [ ] Add Prometheus/OpenObserve labels and dashboards
+- [x] Add Prometheus/OpenObserve labels and dashboards
 - [x] Add `CLAUDE.md`
 - [x] Verify RabbitMQ vhost, credentials, and service DNS separately
 - [x] Verify local-path storage and disk capacity
 
-Phase 0 note: baseline labels/annotations for Prometheus/OpenObserve are present in workload manifests; dashboard pack is pending.
-Phase 0 note: Git repository is initialized, but GitLab remote is not configured yet.
+Phase 0 note: current application `Service` and `Deployment` manifests include baseline Prometheus/OpenObserve labels/annotations.
+Phase 0 note: repository remote URL wiring can be finalized when the target GitLab project path is chosen.
 
 ## Phase 1 — Identity and Security Foundation
 

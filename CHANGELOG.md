@@ -137,3 +137,16 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 1. Implement persistent `AuthRepository` against PostgreSQL tables from `prisma/migrations/20261119_phase1_identity_init/migration.sql`.
 2. Add JWT issue/refresh/revoke service methods and tests.
 3. Add email verification callback flow and state transition from `pending_verification` to `active`.
+
+## 2026-11-19 — Phase 0 checklist closure updates
+
+### Completed
+
+- Updated `PROJECT.md` to explicitly set SCM authority to in-cluster GitLab (`gitlab.rmwhs.com`) and registry (`registry.rmwhs.com`).
+- Marked the SCM platform decision and Prometheus/OpenObserve labeling checklist items as complete in Phase 0.
+- Verified current application service manifest label coverage:
+	- `k8s/services/hotspot-api-svc.yaml` includes `observability.openobserve/enabled` and Prometheus scrape annotations.
+
+### Note
+
+- Git remote URL wiring remains a repo bootstrap action and can be finalized once the exact GitLab project path is selected.
