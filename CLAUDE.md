@@ -4,6 +4,8 @@
 
 HotSpot is an intentionally authentic, identity-verified social media platform that combines text threads, photo/video media, stories, stitches/duets, creator subscriptions, marketing, and live streams. The stack uses Next.js, NestJS, Java 21/Spring, Python workers, PostgreSQL, MongoDB, Redis, RabbitMQ, object storage, and LiveKit. It runs on the existing rmwhs.com k3s home cluster; `PROJECT.md` is the full specification and source of truth.
 
+AI security context is anchored by `.copilot/skills/devsecops/SKILL.md` and must be applied during code, CI, and infrastructure changes.
+
 ## Quick Start
 
 ```bash

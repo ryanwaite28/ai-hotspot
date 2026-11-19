@@ -1,0 +1,11 @@
+node_modules
+.git
+.gitlab
+coverage
+.nyc_output
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12

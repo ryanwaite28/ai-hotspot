@@ -1,0 +1,60 @@
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
+  - template: Jobs/SAST-IaC.gitlab-ci.yml
+
+variables:
+  SECURE_LOG_LEVEL: info
+  CS_SEVERITY_THRESHOLD: HIGH
+
+semgrep-sast:
+  stage: security
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+secret_detection:
+  stage: security
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+dependency_scanning:
+  stage: security
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+container_scanning:
+  stage: security
+  allow_failure: false
+  variables:
+    CS_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+iac-sast:
+  stage: security
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+iac:checkov:
+  stage: security
+  image: bridgecrew/checkov:3.2.383
+  script:
+    - checkov -d . --framework kubernetes,dockerfile,terraform --soft-fail-on LOW,MEDIUM --hard-fail-on HIGH,CRITICAL
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+container:trivy-config:
+  stage: security
+  image: aquasec/trivy:0.56.2
+  script:
+    - trivy config --severity HIGH,CRITICAL --exit-code 1 .
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH'

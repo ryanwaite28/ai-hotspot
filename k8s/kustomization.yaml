@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace/hotspot-namespaces.yaml
+  - rbac/hotspot-deployer-rbac.yaml
+  - services/hotspot-configmap.yaml
+  - services/hotspot-api-svc.yaml
+  - deployments/hotspot-api.yaml
+  - ingress/hotspot-api-ingress.yaml

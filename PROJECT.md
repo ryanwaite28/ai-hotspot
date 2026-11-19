@@ -1044,7 +1044,20 @@ npm run dev
 
 Plain Kubernetes manifests are the default for application workloads. Helm is used only for infrastructure components or third-party stacks. A future Terraform layer may manage DNS, Cloudflare Tunnel configuration, and namespace resources, but it must not own application databases or live credentials.
 
-## 9.5 Build Scripts
+## 9.5 GitOps Strategy (ArgoCD Compatibility)
+
+GitOps is compatible with the HotSpot architecture and does not conflict with service-layer boundaries or runtime rules.
+
+Current default model for this project is **GitLab CI-driven deployment** using `kubectl apply` from protected pipelines. ArgoCD is intentionally deferred during early phases to avoid operational overhead on a constrained home cluster.
+
+If ArgoCD is introduced later, deployment authority must move to ArgoCD for application workloads:
+
+- GitLab CI continues to build/test/scan/push images.
+- CI updates manifest references (tag/digest) in Git.
+- ArgoCD reconciles cluster state from Git and becomes the single runtime deploy authority.
+- CI must stop direct `kubectl apply` for Argo-managed resources to avoid controller conflict/drift loops.
+
+## 9.6 Build Scripts
 
 The repository must expose:
 
@@ -1058,7 +1071,7 @@ The repository must expose:
 - `npm run deploy:prod`
 - `npm run stripe:listen`
 
-## 9.6 Deploy Checklist
+## 9.7 Deploy Checklist
 
 - [ ] protected branch deployment
 - [ ] image tagged by commit SHA
@@ -1072,6 +1085,7 @@ The repository must expose:
 - [ ] Stripe webhook endpoint and signing secret configured
 - [ ] smoke test against public API
 - [ ] GitLab security gates enabled (SAST, Secret, SCA, Container, IaC)
+- [ ] If ArgoCD is enabled: CI direct apply disabled for Argo-managed resources
 
 ---
 
@@ -1156,19 +1170,22 @@ Implementation is divided into controlled, session-sized phases. No phase begins
 ## Phase 0 — Workspace and Cluster Foundation
 
 - [ ] Confirm repository ownership and GitLab remote
-- [ ] Define namespace, registry, ingress, and deploy SA
-- [ ] Add `.gitlab-ci.yml` skeleton and Kaniko/buildah scripts
-- [ ] Create local Docker Compose dependencies
-- [ ] Add environment variable templates
-- [ ] Add Infisical/Kubernetes Secret references
+- [x] Define namespace, registry, ingress, and deploy SA
+- [x] Add `.gitlab-ci.yml` skeleton and Kaniko/buildah scripts
+- [x] Create local Docker Compose dependencies
+- [x] Add environment variable templates
+- [x] Add Infisical/Kubernetes Secret references
 - [ ] Add Prometheus/OpenObserve labels and dashboards
-- [ ] Add `CLAUDE.md`
-- [ ] Verify RabbitMQ vhost, credentials, and service DNS separately
-- [ ] Verify local-path storage and disk capacity
+- [x] Add `CLAUDE.md`
+- [x] Verify RabbitMQ vhost, credentials, and service DNS separately
+- [x] Verify local-path storage and disk capacity
+
+Phase 0 note: baseline labels/annotations for Prometheus/OpenObserve are present in workload manifests; dashboard pack is pending.
+Phase 0 note: Git repository is initialized, but GitLab remote is not configured yet.
 
 ## Phase 1 — Identity and Security Foundation
 
-- [ ] Create PostgreSQL schema for users, sessions, and verification
+- [x] Create PostgreSQL schema for users, sessions, and verification
 - [ ] Implement registration and email verification
 - [ ] Implement JWT/refresh/passkey foundation
 - [ ] Implement account status and RBAC

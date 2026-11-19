@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+model User {
+  id                        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  handle                    String
+  displayName               String                 @map("display_name")
+  email                     String
+  passwordHash              String?                @map("password_hash")
+  status                    String                 @default("pending_verification")
+  identityVerificationStatus String                @default("pending") @map("identity_verification_status")
+  identityVerificationRef   String?                @map("identity_verification_ref")
+  createdAt                 DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime               @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt                 DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  authSessions              AuthSession[]
+  verificationSessions      VerificationSession[]
+
+  @@unique([handle], map: "users_handle_unique")
+  @@unique([email], map: "users_email_unique")
+  @@index([status], map: "users_status_idx")
+  @@map("users")
+}
+
+model AuthSession {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  refreshTokenId String    @unique @map("refresh_token_id")
+  deviceId       String?   @map("device_id")
+  ipAddress      String?   @map("ip_address")
+  userAgent      String?   @map("user_agent")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt], map: "auth_sessions_user_revoked_idx")
+  @@index([expiresAt], map: "auth_sessions_expires_idx")
+  @@map("auth_sessions")
+}
+
+model VerificationSession {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  provider           String
+  providerSubject    String?   @map("provider_subject")
+  providerSessionRef String?   @map("provider_session_ref")
+  status             String
+  failureCode        String?   @map("failure_code")
+  expiresAt          DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "verification_sessions_user_idx")
+  @@index([status], map: "verification_sessions_status_idx")
+  @@map("verification_sessions")
+}

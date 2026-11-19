@@ -1,0 +1,21 @@
+{
+  "name": "hotspot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "HotSpot monorepo",
+  "scripts": {
+    "build": "echo 'TODO: wire monorepo build (apps/services/workers)'",
+    "test": "echo 'TODO: wire unit tests'",
+    "test:integration": "echo 'TODO: wire integration tests'",
+    "test:e2e": "echo 'TODO: wire e2e tests'",
+    "db:migrate": "echo 'TODO: add migration tooling (Prisma/Flyway)'",
+    "db:seed": "bash scripts/seed-local.sh",
+    "dev": "echo 'TODO: start local app processes'",
+    "deploy:dev": "bash ci/deploy.sh dev",
+    "deploy:prod": "bash ci/deploy.sh prod",
+    "stripe:listen": "bash scripts/stripe-listener.sh"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
