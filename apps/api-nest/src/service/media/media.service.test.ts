@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { MediaDerivativeAssembly } from '../../../../../packages/contracts/src';
 import { MediaService, type MediaMetadataPort, type MediaStoragePort } from './media.service';
 
 function createServiceHarness() {
@@ -158,6 +159,101 @@ function createServiceHarness() {
       return comments
         .filter((comment) => comment.mediaAssetId === input.mediaAssetId)
         .slice(0, input.limit);
+    },
+    async createDerivative(input: {
+      sourceMediaAssetId: string;
+      destinationMediaAssetId: string;
+      derivativeType: 'stitch' | 'duet';
+      assembly: MediaDerivativeAssembly;
+      ownerUserId: string;
+      eventId: string;
+      occurredAtEpochSeconds: number;
+    }) {
+      const now = new Date(input.occurredAtEpochSeconds * 1000).toISOString();
+      return {
+        relationshipId: `relationship-${input.eventId}`,
+        sourceMediaAssetId: input.sourceMediaAssetId,
+        destinationMediaAssetId: input.destinationMediaAssetId,
+        derivativeType: input.derivativeType,
+        assembly: input.assembly,
+        ownerUserId: input.ownerUserId,
+        attribution: {
+          sourceOwnerUserId: 'owner-a',
+          destinationOwnerUserId: 'owner-b',
+          sourceMediaAssetId: input.sourceMediaAssetId,
+          destinationMediaAssetId: input.destinationMediaAssetId,
+          createdByUserId: input.ownerUserId,
+        },
+        status: 'created' as const,
+        takedownReason: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+    async setDerivativeStatus(input: {
+      relationshipId: string;
+      status: 'processing' | 'ready' | 'rejected' | 'takedown';
+      takedownReason: string | null;
+      eventId: string;
+      occurredAtEpochSeconds: number;
+    }) {
+      const now = new Date(input.occurredAtEpochSeconds * 1000).toISOString();
+      return {
+        relationshipId: input.relationshipId,
+        sourceMediaAssetId: 'source-asset',
+        destinationMediaAssetId: 'destination-asset',
+        derivativeType: 'stitch' as const,
+        assembly: {
+          sourceStartSeconds: 0,
+          sourceEndSeconds: 5,
+          destinationStartSeconds: 0,
+          destinationEndSeconds: 5,
+        },
+        ownerUserId: 'owner-a',
+        attribution: {
+          sourceOwnerUserId: 'owner-a',
+          destinationOwnerUserId: 'owner-b',
+          sourceMediaAssetId: 'source-asset',
+          destinationMediaAssetId: 'destination-asset',
+          createdByUserId: 'owner-a',
+        },
+        status: input.status,
+        takedownReason: input.takedownReason,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+    async takeDownDerivativesFromSource(input: {
+      sourceMediaAssetId: string;
+      takedownReason: string;
+      eventId: string;
+      occurredAtEpochSeconds: number;
+    }) {
+      const now = new Date(input.occurredAtEpochSeconds * 1000).toISOString();
+      return [{
+        relationshipId: `relationship-takedown-${input.eventId}`,
+        sourceMediaAssetId: input.sourceMediaAssetId,
+        destinationMediaAssetId: 'destination-asset',
+        derivativeType: 'stitch' as const,
+        assembly: {
+          sourceStartSeconds: 0,
+          sourceEndSeconds: 5,
+          destinationStartSeconds: 0,
+          destinationEndSeconds: 5,
+        },
+        ownerUserId: 'owner-a',
+        attribution: {
+          sourceOwnerUserId: 'owner-a',
+          destinationOwnerUserId: 'owner-b',
+          sourceMediaAssetId: input.sourceMediaAssetId,
+          destinationMediaAssetId: 'destination-asset',
+          createdByUserId: 'owner-a',
+        },
+        status: 'takedown' as const,
+        takedownReason: input.takedownReason,
+        createdAt: now,
+        updatedAt: now,
+      }];
     },
   };
 
@@ -376,4 +472,232 @@ test('MediaService upload completion moves uploading asset into processing pipel
   assert.ok(
     harness.metadataEvents.some((event) => event.includes(':processing')),
   );
+});
+
+test('MediaService creates stitch and duet derivatives only from remix-enabled ready assets', async () => {
+  const harness = createServiceHarness();
+
+  const source = await harness.service.createUploadSession({
+    actorUserId: 'owner-a',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: true,
+  });
+  const destination = await harness.service.createUploadSession({
+    actorUserId: 'owner-b',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: true,
+  });
+
+  for (const assetId of [source!.mediaAsset.mediaAssetId, destination!.mediaAsset.mediaAssetId]) {
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'uploaded',
+      eventSource: 'api',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'processing',
+      eventSource: 'worker',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'ready',
+      eventSource: 'worker',
+    });
+  }
+
+  const stitch = await harness.service.createDerivative({
+    actorUserId: 'owner-a',
+    sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+    destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+    derivativeType: 'stitch',
+    assembly: {
+      sourceStartSeconds: 0,
+      sourceEndSeconds: 5,
+      destinationStartSeconds: 2,
+      destinationEndSeconds: 7,
+    },
+  });
+
+  assert.ok(stitch);
+  assert.equal(stitch?.derivativeType, 'stitch');
+
+  const duet = await harness.service.createDerivative({
+    actorUserId: 'owner-b',
+    sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+    destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+    derivativeType: 'duet',
+    assembly: {
+      sourceLayout: 'left',
+      destinationLayout: 'right',
+    },
+  });
+
+  assert.ok(duet);
+  assert.equal(duet?.derivativeType, 'duet');
+});
+
+test('MediaService rejects derivatives for blocked remix, unreadied assets, and invalid assemblies', async () => {
+  const harness = createServiceHarness();
+
+  const source = await harness.service.createUploadSession({
+    actorUserId: 'owner-a',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: false,
+  });
+  const destination = await harness.service.createUploadSession({
+    actorUserId: 'owner-b',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: true,
+  });
+
+  await assert.rejects(
+    () => harness.service.createDerivative({
+      actorUserId: 'owner-a',
+      sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+      destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+      derivativeType: 'stitch',
+      assembly: {
+        sourceStartSeconds: 0,
+        sourceEndSeconds: 5,
+        destinationStartSeconds: 0,
+        destinationEndSeconds: 5,
+      },
+    }),
+    /Derivative media assets must both be ready/,
+  );
+
+  for (const assetId of [source!.mediaAsset.mediaAssetId, destination!.mediaAsset.mediaAssetId]) {
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'uploaded',
+      eventSource: 'api',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'processing',
+      eventSource: 'worker',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'ready',
+      eventSource: 'worker',
+    });
+  }
+
+  await assert.rejects(
+    () => harness.service.createDerivative({
+      actorUserId: 'owner-a',
+      sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+      destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+      derivativeType: 'stitch',
+      assembly: {
+        sourceStartSeconds: 5,
+        sourceEndSeconds: 5,
+        destinationStartSeconds: 0,
+        destinationEndSeconds: 5,
+      },
+    }),
+    /Invalid stitch timeline assembly/,
+  );
+
+  await assert.rejects(
+    () => harness.service.createDerivative({
+      actorUserId: 'owner-a',
+      sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+      destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+      derivativeType: 'duet',
+      assembly: {
+        sourceLayout: 'left',
+        destinationLayout: 'right',
+      },
+    }),
+    /REMIX_NOT_ALLOWED/,
+  );
+});
+
+test('MediaService propagates derivative lifecycle status and source takedowns', async () => {
+  const harness = createServiceHarness();
+
+  const source = await harness.service.createUploadSession({
+    actorUserId: 'owner-a',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: true,
+  });
+
+  const destination = await harness.service.createUploadSession({
+    actorUserId: 'owner-b',
+    mediaKind: 'video',
+    mimeType: 'video/mp4',
+    fileSizeBytes: 2048,
+    allowRemix: true,
+  });
+
+  for (const assetId of [source!.mediaAsset.mediaAssetId, destination!.mediaAsset.mediaAssetId]) {
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'uploaded',
+      eventSource: 'api',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'processing',
+      eventSource: 'worker',
+    });
+    await harness.service.updateProcessingStatus({
+      mediaAssetId: assetId,
+      processingStatus: 'ready',
+      eventSource: 'worker',
+    });
+  }
+
+  const derivative = await harness.service.createDerivative({
+    actorUserId: 'owner-a',
+    sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+    destinationMediaAssetId: destination!.mediaAsset.mediaAssetId,
+    derivativeType: 'stitch',
+    assembly: {
+      sourceStartSeconds: 0,
+      sourceEndSeconds: 5,
+      destinationStartSeconds: 0,
+      destinationEndSeconds: 5,
+    },
+  });
+
+  assert.ok(derivative);
+  assert.equal(derivative?.status, 'created');
+  assert.equal(derivative?.attribution.sourceOwnerUserId, 'owner-a');
+  assert.equal(derivative?.attribution.destinationOwnerUserId, 'owner-b');
+
+  const processing = await harness.service.updateDerivativeStatus({
+    relationshipId: derivative!.relationshipId,
+    status: 'processing',
+  });
+  assert.equal(processing?.status, 'processing');
+
+  const ready = await harness.service.updateDerivativeStatus({
+    relationshipId: derivative!.relationshipId,
+    status: 'ready',
+  });
+  assert.equal(ready?.status, 'ready');
+
+  const takedowns = await harness.service.takeDownDerivativesFromSource({
+    actorUserId: 'owner-a',
+    sourceMediaAssetId: source!.mediaAsset.mediaAssetId,
+    takedownReason: 'source policy violation',
+  });
+
+  assert.equal(takedowns.length, 1);
+  assert.equal(takedowns[0].status, 'takedown');
+  assert.equal(takedowns[0].takedownReason, 'source policy violation');
 });

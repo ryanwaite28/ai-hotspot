@@ -1458,7 +1458,7 @@ Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.spac
 - [x] Add outbox publisher + subscriber integration tests (dedup/retry/DLQ)
 - [x] Enforce dispatch-vs-orchestration-vs-service boundaries for auth flows (gateway adapters call service contracts only)
 
-Phase 1 note: registration, email-verification callback transition, JWT refresh rotation, account-status gating with role claims, identity-verification provider session start flow, signed identity-verification callback deduplication, passkey challenge/credential flow scaffolding, trial activation-once and account lifecycle workflow scaffolding, full auth mutation outbox scaffolding (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`), and notification subscriber scaffolding are implemented at service/repository level with dispatch+composition wiring. Phase 1 runtime/integration matrix executed green.
+Phase 1 note: registration, email-verification callback, JWT refresh rotation, account-status gating with role claims, identity-verification provider session start flow, signed identity-verification callback deduplication, passkey challenge/credential flow scaffolding, trial activation-once and account lifecycle workflow scaffolding, full auth mutation outbox scaffolding (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset_requested`), and notification subscriber scaffolding are implemented at service/repository level with dispatch+composition wiring. Phase 1 runtime/integration matrix executed green.
 
 ## Phase 2 — Profiles and Social Graph
 
@@ -1513,12 +1513,14 @@ Phase 5 note: story publish scaffolding now requires a ready media asset owned b
 
 ## Phase 6 — Stitch and Duet
 
-- [ ] Implement remix permission on media assets
-- [ ] Implement derivative relationship model
-- [ ] Implement stitch timeline assembly contract
-- [ ] Implement duet split-screen contract
-- [ ] Enforce source author attribution and takedown propagation
-- [ ] Add derivative media processing tests
+- [x] Implement remix permission on media assets
+- [x] Implement derivative relationship model
+- [x] Implement stitch timeline assembly contract
+- [x] Implement duet split-screen contract
+- [x] Enforce source author attribution and takedown propagation
+- [x] Add derivative media processing tests
+
+Phase 6 note: media assets expose remix permission and source/destination derivative relationships. Stitch and duet creation validates READY assets, both remix permissions, actor ownership of at least one asset, timeline/split-layout assembly shape, duplicate relationship protection, and outbox-backed `media.derivative.created` mutation events. Derivative records preserve immutable source/destination/creator attribution, support created/processing/ready/rejected/takedown lifecycle transitions, propagate source takedowns to dependent relationships, and emit derivative status/takedown events. Unit coverage includes allowed stitch/duet creation, blocked/unready/invalid derivatives, attribution propagation, lifecycle transitions, and source takedown propagation.
 
 ## Phase 7 — Stripe and Entitlements
 

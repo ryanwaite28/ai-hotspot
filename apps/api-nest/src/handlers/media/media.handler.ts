@@ -1,7 +1,9 @@
 import type {
   CompleteMediaUploadSessionInput,
   CreateMediaCommentInput,
+  CreateMediaDerivativeInput,
   CreateMediaUploadSessionInput,
+  UpdateMediaDerivativeStatusInput,
   UpdateMediaProcessingStatusInput,
 } from '../../../../../packages/contracts/src/index';
 import type { MediaService } from '../../service/media/media.service';
@@ -39,5 +41,32 @@ export class MediaHandler {
     limit?: number;
   }) {
     return this.mediaService.listComments(params.mediaAssetId, params.limit);
+  }
+
+  async createDerivative(
+    actorUserId: string,
+    body: Omit<CreateMediaDerivativeInput, 'actorUserId'>,
+  ) {
+    return this.mediaService.createDerivative({
+      actorUserId,
+      ...body,
+    });
+  }
+
+  async updateDerivativeStatus(body: UpdateMediaDerivativeStatusInput) {
+    return this.mediaService.updateDerivativeStatus(body);
+  }
+
+  async takeDownDerivativesFromSource(
+    actorUserId: string,
+    params: {
+      sourceMediaAssetId: string;
+      takedownReason: string;
+    },
+  ) {
+    return this.mediaService.takeDownDerivativesFromSource({
+      actorUserId,
+      ...params,
+    });
   }
 }

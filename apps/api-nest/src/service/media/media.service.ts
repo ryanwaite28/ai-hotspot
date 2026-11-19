@@ -3,14 +3,17 @@ import crypto from 'node:crypto';
 import type {
   CompleteMediaUploadSessionInput,
   CreateMediaCommentInput,
+  CreateMediaDerivativeInput,
   CreateMediaUploadSessionInput,
   CreateMediaUploadSessionResult,
   MediaAssetView,
   MediaCommentView,
   MediaDerivative,
+  MediaDerivativeRelationshipView,
   MediaProcessingContract,
   MediaProcessingStatus,
   MediaVisibility,
+  UpdateMediaDerivativeStatusInput,
   UpdateMediaProcessingStatusInput,
 } from '../../../../../packages/contracts/src/index';
 import type { MediaRepository } from './postgres-media.repository';
@@ -237,6 +240,40 @@ export class MediaService {
     return Array.from(uniqueIds);
   }
 
+  private validateDerivativeAssembly(input: CreateMediaDerivativeInput): void {
+    if (input.derivativeType === 'stitch') {
+      if (!('sourceStartSeconds' in input.assembly)) {
+        throw new Error('Stitch assembly requires timeline boundaries');
+      }
+
+      const assembly = input.assembly;
+      if (
+        !Number.isFinite(assembly.sourceStartSeconds)
+        || !Number.isFinite(assembly.sourceEndSeconds)
+        || !Number.isFinite(assembly.destinationStartSeconds)
+        || !Number.isFinite(assembly.destinationEndSeconds)
+        || assembly.sourceStartSeconds < 0
+        || assembly.destinationStartSeconds < 0
+        || assembly.sourceEndSeconds <= assembly.sourceStartSeconds
+        || assembly.destinationEndSeconds <= assembly.destinationStartSeconds
+      ) {
+        throw new Error('Invalid stitch timeline assembly');
+      }
+      return;
+    }
+
+    if (!('sourceLayout' in input.assembly)) {
+      throw new Error('Duet assembly requires split-screen layout');
+    }
+
+    if (
+      !(['left', 'right'].includes(input.assembly.sourceLayout))
+      || input.assembly.destinationLayout !== (input.assembly.sourceLayout === 'left' ? 'right' : 'left')
+    ) {
+      throw new Error('Invalid duet layout assembly');
+    }
+  }
+
   async createUploadSession(input: CreateMediaUploadSessionInput): Promise<CreateMediaUploadSessionResult | null> {
     this.validateMimeType(input.mediaKind, input.mimeType);
     this.validateFileSize(input.mediaKind, input.fileSizeBytes);
@@ -385,6 +422,43 @@ export class MediaService {
     return updated;
   }
 
+  async createDerivative(input: CreateMediaDerivativeInput): Promise<MediaDerivativeRelationshipView | null> {
+    this.validateDerivativeAssembly(input);
+
+    if (input.sourceMediaAssetId === input.destinationMediaAssetId) {
+      throw new Error('A derivative cannot use the same source and destination asset');
+    }
+
+    const source = await this.repository.getMediaAssetById(input.sourceMediaAssetId);
+    const destination = await this.repository.getMediaAssetById(input.destinationMediaAssetId);
+
+    if (!source || !destination) {
+      return null;
+    }
+
+    if (source.processingStatus !== 'ready' || destination.processingStatus !== 'ready') {
+      throw new Error('Derivative media assets must both be ready');
+    }
+
+    if (!source.allowRemix || !destination.allowRemix) {
+      throw new Error('REMIX_NOT_ALLOWED');
+    }
+
+    if (source.ownerUserId !== input.actorUserId && destination.ownerUserId !== input.actorUserId) {
+      return null;
+    }
+
+    return this.repository.createDerivative({
+      sourceMediaAssetId: source.mediaAssetId,
+      destinationMediaAssetId: destination.mediaAssetId,
+      derivativeType: input.derivativeType,
+      assembly: input.assembly,
+      ownerUserId: input.actorUserId,
+      eventId: crypto.randomUUID(),
+      occurredAtEpochSeconds: nowEpochSeconds(),
+    });
+  }
+
   async createComment(input: CreateMediaCommentInput): Promise<MediaCommentView | null> {
     const mediaAsset = await this.repository.getMediaAssetById(input.mediaAssetId);
     if (!mediaAsset) {
@@ -434,6 +508,43 @@ export class MediaService {
     return this.repository.listMediaComments({
       mediaAssetId,
       limit: normalizedLimit,
+    });
+  }
+
+  async updateDerivativeStatus(input: UpdateMediaDerivativeStatusInput): Promise<MediaDerivativeRelationshipView | null> {
+    if (input.status === 'takedown' && (!input.takedownReason || input.takedownReason.trim().length === 0)) {
+      throw new Error('Takedown reason is required');
+    }
+
+    return this.repository.setDerivativeStatus({
+      relationshipId: input.relationshipId,
+      status: input.status,
+      takedownReason: input.status === 'takedown' ? input.takedownReason!.trim() : null,
+      eventId: crypto.randomUUID(),
+      occurredAtEpochSeconds: nowEpochSeconds(),
+    });
+  }
+
+  async takeDownDerivativesFromSource(input: {
+    actorUserId: string;
+    sourceMediaAssetId: string;
+    takedownReason: string;
+  }): Promise<MediaDerivativeRelationshipView[]> {
+    const reason = input.takedownReason.trim();
+    if (reason.length === 0) {
+      throw new Error('Takedown reason is required');
+    }
+
+    const source = await this.repository.getMediaAssetById(input.sourceMediaAssetId);
+    if (!source || source.ownerUserId !== input.actorUserId) {
+      return [];
+    }
+
+    return this.repository.takeDownDerivativesFromSource({
+      sourceMediaAssetId: source.mediaAssetId,
+      takedownReason: reason,
+      eventId: crypto.randomUUID(),
+      occurredAtEpochSeconds: nowEpochSeconds(),
     });
   }
 }

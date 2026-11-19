@@ -45,6 +45,7 @@ model User {
   mediaUploadSessions       MediaUploadSession[]
   mediaAssets               MediaAsset[]        @relation("MediaOwner")
   mediaComments             MediaComment[]      @relation("MediaCommentAuthor")
+  mediaAssetDerivatives     MediaAssetDerivative[] @relation("DerivativeOwner")
 
   @@unique([handle], map: "users_handle_unique")
   @@unique([email], map: "users_email_unique")
@@ -327,6 +328,8 @@ model MediaAsset {
   carouselItems    MediaAssetCarouselItem[] @relation("MediaAssetCarousel")
   usedInCarousels  MediaAssetCarouselItem[] @relation("CarouselChildAsset")
   comments         MediaComment[]
+  sourceDerivatives      MediaAssetDerivative[] @relation("DerivativeSource")
+  destinationDerivatives MediaAssetDerivative[] @relation("DerivativeDestination")
 
   @@index([ownerUserId, createdAt], map: "media_assets_owner_created_idx")
   @@index([processingStatus, createdAt], map: "media_assets_processing_status_idx")
@@ -362,4 +365,29 @@ model MediaComment {
   @@index([mediaAssetId, createdAt], map: "media_comments_asset_created_idx")
   @@index([authorUserId, createdAt], map: "media_comments_author_created_idx")
   @@map("media_comments")
+}
+
+model MediaAssetDerivative {
+  id                      String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceMediaAssetId      String     @map("source_media_asset_id") @db.Uuid
+  destinationMediaAssetId String     @map("destination_media_asset_id") @db.Uuid
+  derivativeType          String     @map("derivative_type")
+  assemblyJson            Json       @map("assembly_json")
+  ownerUserId             String     @map("owner_user_id") @db.Uuid
+  sourceOwnerUserId       String     @map("source_owner_user_id") @db.Uuid
+  destinationOwnerUserId  String     @map("destination_owner_user_id") @db.Uuid
+  createdByUserId         String     @map("created_by_user_id") @db.Uuid
+  status                  String     @default("created")
+  takedownReason          String?    @map("takedown_reason")
+  createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+  sourceMediaAsset        MediaAsset @relation("DerivativeSource", fields: [sourceMediaAssetId], references: [id], onDelete: Cascade)
+  destinationMediaAsset   MediaAsset @relation("DerivativeDestination", fields: [destinationMediaAssetId], references: [id], onDelete: Cascade)
+  owner                   User       @relation("DerivativeOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceMediaAssetId, destinationMediaAssetId, derivativeType], map: "media_asset_derivatives_source_destination_type_unique")
+  @@index([sourceMediaAssetId, createdAt], map: "media_asset_derivatives_source_idx")
+  @@index([destinationMediaAssetId, createdAt], map: "media_asset_derivatives_destination_idx")
+  @@index([ownerUserId, createdAt], map: "media_asset_derivatives_owner_idx")
+  @@map("media_asset_derivatives")
 }

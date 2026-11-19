@@ -58,6 +58,22 @@ export interface MediaCommentRow extends DbRow {
   deleted_at: string | null;
 }
 
+export interface MediaDerivativeRelationshipRow extends DbRow {
+  id: string;
+  source_media_asset_id: string;
+  destination_media_asset_id: string;
+  derivative_type: 'stitch' | 'duet';
+  assembly_json: string;
+  owner_user_id: string;
+  source_owner_user_id: string;
+  destination_owner_user_id: string;
+  created_by_user_id: string;
+  status: 'created' | 'processing' | 'ready' | 'rejected' | 'takedown';
+  takedown_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const mediaQueries = {
   insertUploadSessionAndAssetWithOutbox: `
     WITH inserted_session AS (
@@ -375,5 +391,178 @@ export const mediaQueries = {
       AND deleted_at IS NULL
     ORDER BY created_at ASC
     LIMIT $2
+  `,
+
+  insertMediaDerivativeRelationshipWithOutbox: `
+    WITH eligible_assets AS (
+      SELECT
+        source_asset.id AS source_id,
+        source_asset.owner_user_id AS source_owner_id,
+        destination_asset.id AS destination_id,
+        destination_asset.owner_user_id AS destination_owner_id
+      FROM media_assets source_asset
+      JOIN media_assets destination_asset ON destination_asset.id = $2
+      WHERE source_asset.id = $1
+        AND source_asset.processing_status = 'ready'
+        AND source_asset.allow_remix = TRUE
+        AND destination_asset.processing_status = 'ready'
+        AND destination_asset.allow_remix = TRUE
+    ),
+    inserted_relationship AS (
+      INSERT INTO media_asset_derivatives (
+        source_media_asset_id,
+        destination_media_asset_id,
+        derivative_type,
+        assembly_json,
+        owner_user_id,
+        source_owner_user_id,
+        destination_owner_user_id,
+        created_by_user_id,
+        status
+      )
+      SELECT
+        source_id,
+        destination_id,
+        $3,
+        $4::jsonb,
+        $5,
+        source_owner_id,
+        destination_owner_id,
+        $5,
+        'created'
+      FROM eligible_assets
+      WHERE source_owner_id = $5 OR destination_owner_id = $5
+      ON CONFLICT (source_media_asset_id, destination_media_asset_id, derivative_type)
+      DO NOTHING
+      RETURNING id, source_media_asset_id, destination_media_asset_id,
+        derivative_type, assembly_json, owner_user_id, status, created_at, updated_at
+    ),
+    inserted_outbox AS (
+      INSERT INTO domain_event_outbox (
+        event_id,
+        aggregate_type,
+        aggregate_id,
+        aggregate_version,
+        event_type,
+        payload,
+        headers,
+        occurred_at
+      )
+      SELECT
+        $6,
+        'media_asset',
+        imr.destination_media_asset_id,
+        NULL,
+        'media.derivative.created',
+        jsonb_build_object(
+          'relationshipId', imr.id,
+          'sourceMediaAssetId', imr.source_media_asset_id,
+          'destinationMediaAssetId', imr.destination_media_asset_id,
+          'derivativeType', imr.derivative_type,
+          'ownerUserId', imr.owner_user_id
+        ),
+        jsonb_build_object('schemaVersion', 1, 'producer', 'hotspot-api'),
+        to_timestamp($7)
+      FROM inserted_relationship imr
+      RETURNING id
+    )
+    SELECT id, source_media_asset_id, destination_media_asset_id,
+      derivative_type, assembly_json::text, owner_user_id, status, created_at, updated_at
+    FROM inserted_relationship
+  `,
+
+  updateMediaDerivativeStatusWithOutbox: `
+    WITH updated_derivative AS (
+      UPDATE media_asset_derivatives
+      SET
+        status = $2,
+        takedown_reason = CASE WHEN $2 = 'takedown' THEN $3 ELSE takedown_reason END,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, source_media_asset_id, destination_media_asset_id,
+        derivative_type, assembly_json, owner_user_id,
+        source_owner_user_id, destination_owner_user_id, created_by_user_id,
+        status, takedown_reason, created_at, updated_at
+    ),
+    inserted_outbox AS (
+      INSERT INTO domain_event_outbox (
+        event_id, aggregate_type, aggregate_id, aggregate_version, event_type,
+        payload, headers, occurred_at
+      )
+      SELECT
+        $4,
+        'media_asset',
+        ud.destination_media_asset_id,
+        NULL,
+        CASE WHEN $2 = 'takedown' THEN 'media.derivative.takedown' ELSE 'media.derivative.status.changed' END,
+        jsonb_build_object(
+          'relationshipId', ud.id,
+          'sourceMediaAssetId', ud.source_media_asset_id,
+          'destinationMediaAssetId', ud.destination_media_asset_id,
+          'derivativeType', ud.derivative_type,
+          'status', ud.status,
+          'takedownReason', ud.takedown_reason,
+          'sourceOwnerUserId', ud.source_owner_user_id,
+          'destinationOwnerUserId', ud.destination_owner_user_id,
+          'createdByUserId', ud.created_by_user_id
+        ),
+        jsonb_build_object('schemaVersion', 1, 'producer', 'hotspot-api'),
+        to_timestamp($5)
+      FROM updated_derivative ud
+      RETURNING id
+    )
+    SELECT id, source_media_asset_id, destination_media_asset_id,
+      derivative_type, assembly_json::text, owner_user_id,
+      source_owner_user_id, destination_owner_user_id, created_by_user_id,
+      status, takedown_reason, created_at, updated_at
+    FROM updated_derivative
+  `,
+
+  takeDownDerivativesFromSourceWithOutbox: `
+    WITH updated_derivatives AS (
+      UPDATE media_asset_derivatives
+      SET
+        status = 'takedown',
+        takedown_reason = $2,
+        updated_at = NOW()
+      WHERE source_media_asset_id = $1
+        AND status != 'takedown'
+      RETURNING id, source_media_asset_id, destination_media_asset_id,
+        derivative_type, assembly_json, owner_user_id,
+        source_owner_user_id, destination_owner_user_id, created_by_user_id,
+        status, takedown_reason, created_at, updated_at
+    ),
+    inserted_outbox AS (
+      INSERT INTO domain_event_outbox (
+        event_id, aggregate_type, aggregate_id, aggregate_version, event_type,
+        payload, headers, occurred_at
+      )
+      SELECT
+        md5(ud.id::text || ':' || $3),
+        'media_asset',
+        ud.destination_media_asset_id,
+        NULL,
+        'media.derivative.takedown',
+        jsonb_build_object(
+          'relationshipId', ud.id,
+          'sourceMediaAssetId', ud.source_media_asset_id,
+          'destinationMediaAssetId', ud.destination_media_asset_id,
+          'derivativeType', ud.derivative_type,
+          'status', 'takedown',
+          'takedownReason', ud.takedown_reason,
+          'sourceOwnerUserId', ud.source_owner_user_id,
+          'destinationOwnerUserId', ud.destination_owner_user_id,
+          'createdByUserId', ud.created_by_user_id
+        ),
+        jsonb_build_object('schemaVersion', 1, 'producer', 'hotspot-api'),
+        to_timestamp($4)
+      FROM updated_derivatives ud
+      RETURNING id
+    )
+    SELECT id, source_media_asset_id, destination_media_asset_id,
+      derivative_type, assembly_json::text, owner_user_id,
+      source_owner_user_id, destination_owner_user_id, created_by_user_id,
+      status, takedown_reason, created_at, updated_at
+    FROM updated_derivatives
   `,
 };

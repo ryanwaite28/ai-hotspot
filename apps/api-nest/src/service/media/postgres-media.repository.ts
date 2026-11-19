@@ -1,6 +1,9 @@
 import type {
   MediaAssetView,
   MediaCommentView,
+  MediaDerivativeAssembly,
+  MediaDerivativeRelationshipView,
+  MediaDerivativeType,
   MediaProcessingStatus,
   MediaUploadSessionView,
   MediaVisibility,
@@ -9,6 +12,7 @@ import {
   mediaQueries,
   type MediaAssetRow,
   type MediaCommentRow,
+  type MediaDerivativeRelationshipRow,
   type MediaUploadSessionRow,
   type QueryExecutor,
 } from '../../db/queries/media.queries';
@@ -62,6 +66,28 @@ export interface MediaRepository {
     mediaAssetId: string;
     limit: number;
   }): Promise<MediaCommentView[]>;
+  createDerivative(input: {
+    sourceMediaAssetId: string;
+    destinationMediaAssetId: string;
+    derivativeType: MediaDerivativeType;
+    assembly: MediaDerivativeAssembly;
+    ownerUserId: string;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView | null>;
+  setDerivativeStatus(input: {
+    relationshipId: string;
+    status: 'processing' | 'ready' | 'rejected' | 'takedown';
+    takedownReason: string | null;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView | null>;
+  takeDownDerivativesFromSource(input: {
+    sourceMediaAssetId: string;
+    takedownReason: string;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView[]>;
 }
 
 function mapUploadSessionRow(row: MediaUploadSessionRow): {
@@ -130,6 +156,28 @@ function mapMediaCommentRow(row: MediaCommentRow): MediaCommentView {
     status: row.status,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
+  };
+}
+
+function mapMediaDerivativeRelationshipRow(row: MediaDerivativeRelationshipRow): MediaDerivativeRelationshipView {
+  return {
+    relationshipId: row.id,
+    sourceMediaAssetId: row.source_media_asset_id,
+    destinationMediaAssetId: row.destination_media_asset_id,
+    derivativeType: row.derivative_type,
+    assembly: JSON.parse(row.assembly_json) as MediaDerivativeAssembly,
+    ownerUserId: row.owner_user_id,
+    attribution: {
+      sourceOwnerUserId: row.source_owner_user_id,
+      destinationOwnerUserId: row.destination_owner_user_id,
+      sourceMediaAssetId: row.source_media_asset_id,
+      destinationMediaAssetId: row.destination_media_asset_id,
+      createdByUserId: row.created_by_user_id,
+    },
+    status: row.status,
+    takedownReason: row.takedown_reason,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -255,5 +303,72 @@ export class PostgresMediaRepository implements MediaRepository {
     ]);
 
     return result.rows.map(mapMediaCommentRow);
+  }
+
+  async createDerivative(input: {
+    sourceMediaAssetId: string;
+    destinationMediaAssetId: string;
+    derivativeType: MediaDerivativeType;
+    assembly: MediaDerivativeAssembly;
+    ownerUserId: string;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView | null> {
+    const result = await this.db.query<MediaDerivativeRelationshipRow>(
+      mediaQueries.insertMediaDerivativeRelationshipWithOutbox,
+      [
+        input.sourceMediaAssetId,
+        input.destinationMediaAssetId,
+        input.derivativeType,
+        JSON.stringify(input.assembly),
+        input.ownerUserId,
+        input.eventId,
+        input.occurredAtEpochSeconds,
+      ],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return mapMediaDerivativeRelationshipRow(result.rows[0]);
+  }
+
+  async setDerivativeStatus(input: {
+    relationshipId: string;
+    status: 'processing' | 'ready' | 'rejected' | 'takedown';
+    takedownReason: string | null;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView | null> {
+    const result = await this.db.query<MediaDerivativeRelationshipRow>(mediaQueries.updateMediaDerivativeStatusWithOutbox, [
+      input.relationshipId,
+      input.status,
+      input.takedownReason,
+      input.eventId,
+      input.occurredAtEpochSeconds,
+    ]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return mapMediaDerivativeRelationshipRow(result.rows[0]);
+  }
+
+  async takeDownDerivativesFromSource(input: {
+    sourceMediaAssetId: string;
+    takedownReason: string;
+    eventId: string;
+    occurredAtEpochSeconds: number;
+  }): Promise<MediaDerivativeRelationshipView[]> {
+    const result = await this.db.query<MediaDerivativeRelationshipRow>(mediaQueries.takeDownDerivativesFromSourceWithOutbox, [
+      input.sourceMediaAssetId,
+      input.takedownReason,
+      input.eventId,
+      input.occurredAtEpochSeconds,
+    ]);
+
+    return result.rows.map(mapMediaDerivativeRelationshipRow);
   }
 }

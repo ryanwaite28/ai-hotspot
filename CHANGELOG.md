@@ -1,5 +1,48 @@
 # HotSpot Changelog
 
+## 2026-11-19 — Phase 6 stitch/duet remix foundation
+
+### Completed
+
+- Added typed stitch/duet derivative contracts:
+	- `MediaDerivativeType`
+	- stitch timeline assembly
+	- duet split-screen layout assembly
+	- derivative relationship view and create input
+	- file: `packages/contracts/src/media-contracts.ts`
+- Added service-layer remix and derivative enforcement:
+	- source and destination assets must be READY
+	- both assets must allow remix
+	- actor must own at least one source/destination asset
+	- stitch timeline boundaries are validated
+	- duet split layouts are validated
+	- source/destination cannot be the same asset
+	- file: `apps/api-nest/src/service/media/media.service.ts`
+- Added derivative relationship repository/SQL/outbox foundation:
+	- explicit `media_asset_derivatives` table migration
+	- `media.derivative.created` outbox event
+	- duplicate relationship protection
+	- files:
+		- `apps/api-nest/src/db/queries/media.queries.ts`
+		- `apps/api-nest/src/service/media/postgres-media.repository.ts`
+		- `prisma/migrations/20261119_phase6_derivative_relationships/migration.sql`
+		- `prisma/schema.prisma`
+- Added media handler derivative entrypoint:
+	- `apps/api-nest/src/handlers/media/media.handler.ts`
+- Added unit coverage for allowed stitch/duet creation and blocked/unready/invalid derivatives:
+	- `apps/api-nest/src/service/media/media.service.test.ts`
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
+- Result: 6 passed, 0 failed.
+
+### Pending
+
+- Source author attribution propagation
+- Takedown propagation
+- Derivative processing lifecycle tests
+
 ## 2026-11-19 — Phase 5 checklist closure (cleanup + edge-case tests)
 
 ### Completed
@@ -805,7 +848,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - Re-reviewed Phase 1 implementation checklist against current code artifacts before any Phase 2 start.
 - Corrected Phase 1 checklist status in `PROJECT.md` for auth mutation outbox coverage:
-	- Marked the full mutation-event item as incomplete because only `user.created` and `user.email-reset-requested` are currently scaffolded.
+	- Marked the full mutation-item as incomplete because only `user.created` and `user.email-reset_requested` are currently scaffolded.
 - Updated Phase 1 note text to explicitly state current event coverage and remaining gaps.
 
 ### Outcome
@@ -1300,3 +1343,19 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
 - Targeted regression suite passed:
 	- 20 passed, 0 failed, 2 skipped (runtime integration tests skipped without `PHASE3_RUNTIME_INTEGRATION=1`).
+
+## 2026-11-19 — Phase 6 derivative attribution and takedown propagation
+
+### Completed
+
+- Extended derivative relationship contracts with immutable attribution fields and lifecycle/takedown states.
+- Added derivative lifecycle repository operations and SQL for processing, ready, rejected, and takedown transitions.
+- Added source-authorized takedown propagation across downstream derivative relationships.
+- Added derivative status/takedown outbox events and attribution payload fields.
+- Added lifecycle and source-takedown unit coverage.
+- Updated `PROJECT.md` to mark Phase 6 complete.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
+- Result: 7 passed, 0 failed.

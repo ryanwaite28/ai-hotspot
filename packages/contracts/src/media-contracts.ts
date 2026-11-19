@@ -98,3 +98,55 @@ export interface CreateMediaCommentInput {
   bodyText: string;
   parentCommentId?: string;
 }
+
+export type MediaDerivativeType = 'stitch' | 'duet';
+
+export interface StitchTimelineAssembly {
+  sourceStartSeconds: number;
+  sourceEndSeconds: number;
+  destinationStartSeconds: number;
+  destinationEndSeconds: number;
+}
+
+export interface DuetLayoutAssembly {
+  sourceLayout: 'left' | 'right';
+  destinationLayout: 'right' | 'left';
+}
+
+export type MediaDerivativeAssembly = StitchTimelineAssembly | DuetLayoutAssembly;
+
+export interface CreateMediaDerivativeInput {
+  actorUserId: string;
+  sourceMediaAssetId: string;
+  destinationMediaAssetId: string;
+  derivativeType: MediaDerivativeType;
+  assembly: MediaDerivativeAssembly;
+}
+
+export interface MediaDerivativeAttribution {
+  sourceOwnerUserId: string;
+  destinationOwnerUserId: string;
+  sourceMediaAssetId: string;
+  destinationMediaAssetId: string;
+  createdByUserId: string;
+}
+
+export interface MediaDerivativeRelationshipView {
+  relationshipId: string;
+  sourceMediaAssetId: string;
+  destinationMediaAssetId: string;
+  derivativeType: MediaDerivativeType;
+  assembly: MediaDerivativeAssembly;
+  ownerUserId: string;
+  attribution: MediaDerivativeAttribution;
+  status: 'created' | 'processing' | 'ready' | 'rejected' | 'takedown';
+  takedownReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateMediaDerivativeStatusInput {
+  relationshipId: string;
+  status: 'processing' | 'ready' | 'rejected' | 'takedown';
+  takedownReason?: string;
+}
