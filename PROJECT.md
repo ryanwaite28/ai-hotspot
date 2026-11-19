@@ -1,0 +1,1439 @@
+# HotSpot
+
+## Intentional, Authentic Social Media
+
+### Project Master Document v1.0
+
+> **Single source of truth** — This document is the authoritative specification for HotSpot. AI coding assistants must generate implementation tasks and code directly from this document. Architectural decisions, data contracts, infrastructure, business rules, and implementation phases belong here.
+
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+2. [Functional Requirements](#2-functional-requirements)
+3. [Non-Functional Requirements](#3-non-functional-requirements)
+4. [System Architecture](#4-system-architecture)
+5. [K3s Infrastructure & Resources](#5-k3s-infrastructure--resources)
+6. [Software Design](#6-software-design)
+7. [Data Model](#7-data-model)
+8. [API Documentation](#8-api-documentation)
+9. [DevOps & Deployment](#9-devops--deployment)
+10. [Local Development](#10-local-development)
+11. [Implementation Plan](#11-implementation-plan)
+12. [Project Rules & AI-IDE Guidelines](#12-project-rules--ai-ide-guidelines)
+13. [Infrastructure Cost Estimates](#13-infrastructure-cost-estimates)
+14. [Testing Plan](#14-testing-plan)
+
+---
+
+# 1. Project Overview
+
+## 1.1 What Is HotSpot?
+
+HotSpot is a long-term personal social platform project intended to demonstrate trustworthy social-network engineering on a resource-constrained home Kubernetes cluster.
+
+It blends text-first conversation and short-form visual media. Users publish posts, replies, reposts, quotes, photos, videos, short stories, stitches, duets, and live streams. HotSpot intentionally does not use a machine-learning personalization algorithm or behavioral engagement ranking. Content discovery is chronological, followed-account based, explicitly categorized, locally/community organized, and optionally selected by user-controlled interests.
+
+## 1.2 How It Works
+
+```text
+VERIFIED USER
+  → Register and complete identity verification
+  → Create an account with encrypted credentials
+  → Receive seven days of complete paid-feature access
+  → Browse chronological feeds, stories, communities, and subscriptions
+  → Publish text, photo, video, or live content
+
+CREATOR
+  → Set a paid tier and publish subscriber-only featured content
+  → Receive support revenue minus platform fees
+  → Run live streams when live-tier access is active
+  → Use paid marketing tools to create clearly labeled campaigns
+
+VIEWER
+  → Read/watch public or subscribed content
+  → Reply, repost, quote, react, or report
+  → Subscribe to creators
+  → Buy or upgrade a platform tier
+
+ADMIN / TRUST & SAFETY
+  → Review verification, reports, impersonation, and policy flags
+  → Suspend or restore accounts through auditable moderation actions
+  → Disable fake, bot, abusive, or deceptive accounts
+
+FREE-ACCOUNT USER
+  → Use core social features
+  → See clearly labeled sponsored ads
+  → Never receive paid marketing boosts, creator monetization, or live access
+
+STRIPE
+  → Checkout for platform tiers and subscriptions
+  → Verify webhook signatures
+  → Emit payment and payout events
+  → Publish entitlements only after durable processing
+```
+
+## 1.3 Key Entities
+
+| Entity | Description |
+|---|---|
+| User | Human account holder with verified identity state and consented profile data |
+| Verification | Identity and liveness proof result issued through a provider adapter |
+| Profile | Public identity, bio, avatar, links, verification badge, and privacy settings |
+| Post | Text, media, thread, repost, quote, or story content unit |
+| Comment/Reply | A reply attached to a post, media item, or another reply |
+| MediaAsset | Stored video/photo asset with processing and moderation states |
+| Story | Ephemeral 24-hour photo/video update |
+| Stitch/Duet | Derivative video referencing and arranging source media |
+| Follow | Directed relationship between users |
+| Subscription | Paid follower relationship to a creator feature tier |
+| PlatformTier | Paid platform entitlement tier for marketing, creator, or live capabilities |
+| CreatorTier | A creator-defined subscription tier granting featured-content access |
+| Campaign | A user-created paid marketing campaign with budget and labeled placement |
+| LiveStream | Scheduled or active live broadcast with chat and access rules |
+| Ad | Sponsored placement explicitly identified as advertising |
+| Report | User-submitted trust and safety complaint |
+| ModerationCase | Auditable review state for a reported account or item |
+| Entitlement | Effective, time-bounded platform capability held by an account |
+| Notification | User-targeted event with delivery state |
+| AuditEvent | Append-only administrative or security action |
+
+## 1.4 Domain-Specific Logic
+
+- **Chronological feeds** — no engagement prediction, affinity model, or ML ranking. Ranking is permitted only by explicit chronological order, followed account, pinned order, active story order, and user-selected category/tag filters.
+- **No personal-data sale** — HotSpot never sells identity, profile, relationship, behavioral, or content data to advertisers or brokers.
+- **Ads** — free accounts see clearly labeled sponsored placements. Paid accounts do not receive advertising unless the user explicitly opts in.
+- **Identity verification** — an account cannot gain verified status from self-assertion. Verification requires an approved identity and liveness result from an external verifier. The platform stores a provider reference and verification outcome, not raw document images.
+- **Bot/fake-account prevention** — automated creation is rate-limited, identity verification is required for public posting, and suspicious automation signals create moderation review rather than covert ranking penalties.
+- **First-week trial** — an account activated for the first time receives every platform capability for 7×24 hours. Trial activation is recorded once and cannot be reset by account recreation or support action except for audited fraud recovery.
+- **Pay wall** — marketing, creator subscriptions, and live streaming are independently gated, but a platform tier may bundle entitlements. API and UI enforce the same entitlement service.
+- **Stripe authority** — Stripe confirmation plus a durable signed webhook event grants entitlements. Stripe invoice or subscription events are never exposed directly to grant capabilities.
+- **Story expiration** — stories expire exactly 24 hours after successful publish and are excluded from feeds, API responses, and public deep links after expiration.
+- **Stitch/Duet rights** — source media must allow remixing. Stitch/duet creation copies no data into the source asset and stores a directed derivative relationship.
+- **Live archive** — live streams are ephemeral by default. Recording requires explicit creator opt-in and access rules inherited by the recording.
+
+## 1.5 Project Identity
+
+| Field | Value |
+|---|---|
+| Project name | HotSpot |
+| Domain | Identity-verified social publishing and community media |
+| API URL — local | `http://api.hotspot.local` |
+| Web URL — local | `http://hotspot.local` |
+| API URL — production | `https://api.hotspot.rmwhs.com` |
+| Web URL — production | `https://hotspot.rmwhs.com` |
+| AWS Account | Not applicable; this project is home-server first |
+| AWS Region | Not applicable |
+| Environments | `local`, `dev`, `production` |
+| Resource prefix | `hotspot` |
+| Email sender | `noreply@rmwhs.com` |
+| Primary cluster | k3s single-node cluster at `elitedesk-800` |
+
+## 1.6 Mission
+
+HotSpot demonstrates an ethically scoped, verifiable, deployable social platform that is operated for personal use on limited hardware while remaining separable from a larger production environment.
+
+---
+
+# 2. Functional Requirements
+
+## 2.1 Account, Authentication, and Identity
+
+- **FR-AUTH-01**: Support email/password registration with email verification before a session is fully active.
+- **FR-AUTH-02**: Support passkeys or WebAuthn after the account exists and can complete MFA setup.
+- **FR-AUTH-03**: Issue short-lived access JWTs and rotating refresh tokens; refresh tokens are revoked on reuse or logout.
+- **FR-AUTH-04**: Require MFA for monetization configuration, payout account changes, and moderation actions.
+- **FR-AUTH-05**: Support account suspension, deactivation, export request, and irreversible deletion workflow.
+- **FR-AUTH-06**: A public publishing account must complete identity verification before text, media, or live public visibility is allowed.
+- **FR-AUTH-07**: Store provider verification references, status, country of record, and review timestamps; never store raw identity documents in application databases.
+- **FR-AUTH-08**: Reject duplicate verification identities when the provider returns a stable subject identifier already attached to another active account.
+- **FR-AUTH-09**: The platform must expose clear reasons for verification failure without revealing internal fraud model rules.
+- **FR-AUTH-10**: Bots, automated agents, bulk-creation clients, and synthetic accounts are prohibited and never receive posting rights.
+
+## 2.2 Profiles and Social Graph
+
+- **FR-SOCIAL-01**: Users may edit display name, unique handle, biography, profile media, links, and visibility settings.
+- **FR-SOCIAL-02**: Handle changes preserve redirect metadata and require uniqueness.
+- **FR-SOCIAL-03**: Users may follow public accounts or send a follow request to protected accounts.
+- **FR-SOCIAL-04**: The follow graph must support follow, unfollow, block, mute, remove follower, approve, and reject operations.
+- **FR-SOCIAL-05**: Blocking removes outbound and inbound visibility and delivery of future notifications.
+- **FR-SOCIAL-06**: Profiles expose mutual-follow and subscription state only when policy permits.
+- **FR-SOCIAL-07**: Account lists use cursor pagination and deterministic ordering.
+
+## 2.3 Text and Thread Posts
+
+- **FR-POST-01**: Create text posts with a configurable maximum length in the `POST_TEXT_MAX_LENGTH` setting.
+- **FR-POST-02**: Support drafts, scheduled publication, editing within policy, delete, pin, and unpin.
+- **FR-POST-03**: Support threaded replies that preserve parent post, direct reply, and thread-root identifiers.
+- **FR-POST-04**: Support repost, quote post, like, bookmark, and share actions; no action may be silently counted twice.
+- **FR-POST-05**: Quote and repost behavior must obey source privacy, blocking, deletion, and takedown rules.
+- **FR-POST-06**: Edited posts retain an immutable edit history visible through the post detail API.
+- **FR-POST-07**: Post and reply deletion removes public references subject to moderation retention rules.
+- **FR-POST-08**: Posts may be ordered only by chronological, pinned, thread, and explicitly selected topic/category rules.
+
+## 2.4 Photos and Short Videos
+
+- **FR-MEDIA-01**: Support photo and video upload via a resumable object-storage upload session.
+- **FR-MEDIA-02**: Create a media processing job for transcoding, thumbnail generation, perceptual fingerprints, and metadata extraction.
+- **FR-MEDIA-03**: Reject unsupported MIME types and files exceeding configured size/duration limits.
+- **FR-MEDIA-04**: Publish media only after transcoding and safety checks reach `READY` or an authorized human-override state.
+- **FR-MEDIA-05**: Support photo carousel, aspect ratios, captions, alt text, location opt-in, tags, and media visibility.
+- **FR-MEDIA-06**: Support comments and replies on photo and video media posts.
+- **FR-MEDIA-07**: Support stitching and duets only when both source and destination media permit remixing.
+- **FR-MEDIA-08**: Stitch/duet media retain auditable source references and attribution.
+- **FR-MEDIA-09**: Derivative media is published only after processing its own transcript, thumbnail, and policy checks.
+
+## 2.5 Stories
+
+- **FR-STORY-01**: Publish photo or short-video stories for 24 hours from successful processing completion.
+- **FR-STORY-02**: Stories expire automatically through a worker and become inaccessible from public feeds and deep links.
+- **FR-STORY-03**: Support view counts and explicit viewers only for story owners.
+- **FR-STORY-04**: Support story replies delivered to the owner's inbox.
+- **FR-STORY-05**: Story visibility uses public, followers, or selected-close-friends policy.
+- **FR-STORY-06**: Screenshots/downloads are not prevented unless additional DRM/client controls are deployed; no false privacy claim is made.
+
+## 2.6 Discovery and Feeds
+
+- **FR-FEED-01**: Provide chronological following, recent public, category/tag, and bookmark feeds.
+- **FR-FEED-02**: Discovery may filter or group by explicit user-selected interests, not inferred personality or engagement profiles.
+- **FR-FEED-03**: Feed results contain no sponsored placement unless the account is free-tier or explicitly opted in.
+- **FR-FEED-04**: Labeled sponsored posts may be inserted without ranking based on inferred personal behavior.
+- **FR-FEED-05**: Search supports handles, display names, text, category tags, and media content metadata.
+- **FR-FEED-06**: Feed and search services exclude blocked, muted, deleted, expired, suspended, and policy-hidden content.
+- **FR-FEED-07**: The platform must provide a visible explanation of feed source: Following, Public, Topic, or Sponsored.
+
+## 2.7 Marketing and Advertising
+
+- **FR-MKT-01**: Marketing capabilities are blocked unless the account has a qualifying paid platform tier or the first-week trial entitlement.
+- **FR-MKT-02**: Users may create sponsored campaigns with objective, placement, category, budget, start/end time, creative, and destination URL.
+- **FR-MKT-03**: Campaigns require payment authorization, ad policy review, identity verification, and target-location validation.
+- **FR-MKT-04**: Ads must be visibly labeled as sponsored and use the least data necessary for delivery and aggregate reporting.
+- **FR-MKT-05**: Campaign reporting includes aggregate impressions, clicks, spend, and region-level metrics, not individual-person sales.
+- **FR-MKT-06**: Users may pause or cancel campaigns and receive a refundable-amount estimate based on Stripe and delivery state.
+- **FR-MKT-07**: HotSpot must not sell ad profiles or personally identifiable advertising data.
+- **FR-MKT-08**: No sensitive-interest targeting is allowed. Initial targeting is country/region, category, and explicit following/creator affinity only.
+
+## 2.8 Featured Creator Subscriptions
+
+- **FR-CREATE-01**: Creators may create paid creator tiers with name, price, recurring interval, description, benefits, and subscriber limits.
+- **FR-CREATE-02**: Creator tiers are independent of HotSpot platform tiers and require Stripe Connect-compatible payout setup.
+- **FR-CREATE-03**: Creator content may be public, subscriber-only, or tier-specific.
+- **FR-CREATE-04**: Subscription checkout and cancellation use signed Stripe webhook events as the entitlement source of truth.
+- **FR-CREATE-05**: Subscriber access ends at the period end or immediately after refund/cancellation rules configured by policy.
+- **FR-CREATE-06**: Creators may offer featured posts, featured media collections, supporter-only threads, and supporter chat.
+- **FR-CREATE-07**: Trial accounts may preview or use the subscription management flow but paid subscriptions require Stripe confirmation.
+
+## 2.9 Live Streaming
+
+- **FR-LIVE-01**: Live streaming is blocked unless the account has a qualifying paid tier or the active first-week trial entitlement.
+- **FR-LIVE-02**: Creators may schedule, start, pause, end, and moderate a live stream.
+- **FR-LIVE-03**: Live audiences may view public streams or streams restricted to followers or subscribed tiers.
+- **FR-LIVE-04**: Live chat supports messages, replies, moderation, blocked words, slow mode, and host removal.
+- **FR-LIVE-05**: Stream authorization is issued as short-lived signed credentials and expires on stream end.
+- **FR-LIVE-06**: VOD recording is opt-in, and recording access follows the original stream visibility plus any creator override.
+- **FR-LIVE-07**: Stream health and viewer metrics are asynchronous, privacy-preserving aggregates.
+
+## 2.10 Stripe, Trials, and Entitlements
+
+- **FR-BILL-01**: Every paid capability has an entitlement key and a source such as trial, platform subscription, creator subscription, or admin grant.
+- **FR-BILL-02**: All accounts receive a 7-day full-feature trial once, from verified account activation.
+- **FR-BILL-03**: Trial expiry removes marketing, creator monetization, and live entitlements, retaining core social features.
+- **FR-BILL-04**: Platform tiers must be explicitly versioned and contain entitlement bundles.
+- **FR-BILL-05**: Stripe Checkout is used for one-time and recurring purchases.
+- **FR-BILL-06**: Stripe webhook signatures are validated, events are deduplicated by event ID, and entitlements are updated transactionally.
+- **FR-BILL-07**: Webhook processing is idempotent and independently retryable.
+- **FR-BILL-08**: Billing disputes and refunds suspend or adjust entitlements according to recorded Stripe state.
+- **FR-BILL-09**: Paid actions must never rely on a browser-reported tier or entitlement field.
+
+## 2.11 Notifications and Email
+
+- **FR-NOTIF-01**: Support in-app, push, and email notifications for follow, reply, mention, subscription, live, billing, and moderation events.
+- **FR-NOTIF-02**: Users control channel and category notification settings.
+- **FR-NOTIF-03**: Notification delivery is event-driven and retries with a bounded exponential backoff.
+- **FR-NOTIF-04**: Email types: Verification, Password Reset, Welcome, Trial Expiring, Trial Expired, Subscription Purchased, Subscription Renewed, Subscription Canceled, Refund, Campaign Approved, Campaign Rejected, Report Received, Moderation Action, and Live Stream Started.
+- **FR-NOTIF-05**: Notification preferences are enforced before queue publication and at delivery time.
+
+## 2.12 Trust, Safety, and Administration
+
+- **FR-TRUST-01**: Users may report posts, media, accounts, comments, campaigns, live streams, and harassment.
+- **FR-TRUST-02**: Reports require category, description, and evidence; duplicate reports aggregate.
+- **FR-TRUST-03**: Moderation states include Open, Triaged, Escalated, Resolved, and Appealed.
+- **FR-TRUST-04**: Moderators require MFA and receive least-privilege roles.
+- **FR-TRUST-05**: Moderation actions are append-only audit events with actor, reason, target, and timestamp.
+- **FR-TRUST-06**: Appeals pause account enforcement only according to defined policy; they do not silently restore account privileges.
+- **FR-TRUST-07**: The moderation queue is operator-focused and never user-personalized.
+- **FR-TRUST-08**: Account identity, ad activity, monetization, and public posting may be independently restricted.
+
+## 2.13 Frontend Requirements
+
+- **FR-FE-01**: The web app provides signup, login, verification, profile, feed, compose, media, story, subscription, marketing, live, moderation, and settings routes.
+- **FR-FE-02**: Mobile-responsive layouts prioritize short video, text thread, photo, and live interactions.
+- **FR-FE-03**: Every paid feature clearly identifies the entitlement required and the available action.
+- **FR-FE-04**: The UI discloses sponsored content and the reason a feed source is displayed.
+- **FR-FE-05**: Accessibility: semantic labels, keyboard operation, visible focus, reduced-motion mode, media alternatives, and WCAG 2.2 AA target.
+- **FR-FE-06**: Upload UI supports progress, retry, cancellation, and an explicit processing state.
+- **FR-FE-07**: The UI contains no engagement optimization or speculative recommendation UI.
+- **FR-FE-08**: Account deletion and data export controls are visible and confirmation-driven.
+
+---
+
+# 3. Non-Functional Requirements
+
+- **NFR-01** — Async processing: media, notifications, story cleanup, Stripe processing, live lifecycle, and verification processing run outside request handlers.
+- **NFR-02** — Idempotency: writes use idempotency keys; Stripe webhook events and RabbitMQ deliveries are deduplicated.
+- **NFR-03** — Cost efficiency: shared cluster services are preferred; pods remain one-replica unless scaling evidence exists; no cloud-managed database or CDN is required.
+- **NFR-04** — Testability: core domain services are framework-independent and unit tested with mocked ports.
+- **NFR-05** — Local development parity: local services implement the same contracts as Kubernetes, including RabbitMQ, PostgreSQL, Redis, object storage, and Stripe webhooks.
+- **NFR-06** — Environment isolation: namespaces and names are prefixed `hotspot-{env}`; no HotSpot credentials are shared between environments.
+- **NFR-07** — Observability: structured JSON logs, correlation IDs, metrics, traces, and security/audit events are emitted to the existing Prometheus/OpenObserve stack.
+- **NFR-08** — Security: secrets come from Infisical or Kubernetes Secrets; no credentials are committed; least-privilege RBAC and network policies are required.
+- **NFR-09** — Service-layer supremacy: all business decisions live in typed service modules. API/workers only parse input, call services, and map outputs.
+- **NFR-10** — Privacy: data collection is purpose-limited, retention-bounded, and exportable/deletable.
+- **NFR-11** — Availability: a pod restart must not lose durable work or grant entitlement twice.
+- **NFR-12** — Capacity: workloads must respect the cluster's 4 vCPU/24 GiB ceiling and declare requests and limits.
+- **NFR-13** — Immutable state: post edit history, payments, moderation actions, and entitlement grants append durable audit records.
+- **NFR-14** — Data boundaries: raw identity evidence is not stored in HotSpot databases or object storage.
+- **NFR-15** — Open APIs: HTTP APIs use versioned, documented, typed contracts and cursor pagination.
+- **NFR-16** — No rank training: no engagement prediction model or opaque ML personalization ranking is implemented.
+- **NFR-17** — Security of uploads: object keys are non-guessable, upload URLs are short-lived, and content types are revalidated after upload.
+- **NFR-18** — Controlled rollout: each feature phase is independently deployable and toggled by feature flag where practical.
+
+---
+
+# 4. System Architecture
+
+## 4.1 Architecture Philosophy
+
+HotSpot uses a dispatch/service split:
+
+- **Dispatch Layer** — NestJS API, Spring Security/Billing services, Python verification/asset workers, and RabbitMQ consumers parse transport input and call typed application services.
+- **Service Layer** — domain services own validation, entitlement decisions, transactions, event publication, and side effects.
+
+> ⚠ **Service Layer Supremacy — Core Architectural Rule**  
+> No route, worker, Lambda-style handler, scheduled job, or GraphQL resolver may contain business rules or direct data access outside the architecture's service/query contracts. A transport layer is replaceable and intentionally thin.
+
+## 4.2 Production Architecture
+
+```text
+CLOUDFLARE
+  HTTPS
+    → nginx-external ingress / hotspot.rmwhs.com
+
+[Next.js Web] ──REST/GraphQL/WebSocket──┐
+                                        ↓
+                           NestJS API Gateway / BFF
+                     auth | users | posts | media | feed
+                                        ↓
+        ┌───────────────────────────────┼─────────────────────────────┐
+        ↓                               ↓                             ↓
+PostgreSQL                         Redis cache                    RabbitMQ
+accounts/content/payment             sessions/rate             durable jobs/events
+MongoDB                         short-lived feeds                    .dlx/.dlq
+media metadata/chats
+        ┌───────────────────────────────┼─────────────────────────────┐
+        ↓                               ↓                             ↓
+ Java Spring                       Python Workers              Node Workers
+identity/billing?                 verify/media/mod          rxjs-rabbitmq
+entitlement/payment                image/video              notifications
+        ↓                               ↓                             ↓
+     Stripe                         Email provider
+                               SMTP/Mailpit local
+
+LiveKit / SFU
+  → RTMP/WebRTC ingest
+  → HLS/WebRTC delivery
+  → live chat via Redis/RabbitMQ
+
+Observability
+  → Prometheus/Grafana metrics
+  → OpenObserve logs/traces
+  → Alertmanager
+```
+
+## 4.3 Portfolio/Home-Server Architecture
+
+```text
+Internet
+  → Cloudflare DNS / edge
+  → nginx-external ingress
+  → one replica services
+  → PostgreSQL pod/PVC
+  → Redis pod
+  → RabbitMQ pod
+  → object storage pod/PVC (MinIO or Longhorn-backed)
+  → MongoDB pod/PVC for media/chat hot metadata
+  → LiveKit pod or external WebRTC relay
+```
+
+| Concern | Home Server | Larger Production |
+|---|---|---|
+| Compute | 4 vCPU single node | Multi-node Kubernetes |
+| Database | Dedicated PostgreSQL single instance | Managed PostgreSQL Multi-AZ |
+| Object storage | S3-compatible in-cluster storage | Managed object storage/CDN |
+| Cache | Redis single instance | Redis cluster |
+| Broker | Existing RabbitMQ | Managed or HA RabbitMQ |
+| Live | LiveKit single or external relay | Multi-region SFU with TURN |
+| Replicas | 1 | 2+ across zones |
+| Backups | Scheduled dumps/PVC snapshots | Point-in-time backup/object replication |
+| Cost | Existing hardware + power/domain | Variable managed-service cost |
+
+## 4.4 Async Event Flow
+
+```text
+MEDIA_UPLOAD_COMPLETED
+  → API validates upload session
+  → [Media Service] creates processing record
+  → RabbitMQ `hotspot.media.processing` publish
+  → [Python Media Worker] transcodes/thumbnail/fingerprint
+  → Store derived assets
+  → [Media Service] updates status and publishes READY
+  → Feed/notification adapters consume READY event
+
+STRIPE_WEBHOOK_RECEIVED
+  → [Stripe Adapter] verifies signature
+  → [Billing Service] deduplicates Stripe event ID
+  → DB transaction records event and effective entitlement
+  → RabbitMQ `hotspot.billing.entitlement.changed`
+  → Notification/email and subscription workers consume event
+
+STORY_PUBLISHED
+  → [Story Service] calculates expires_at = now + 24h
+  → Worker schedule or delayed queue enqueues expiry job
+  → Job checks current persisted state
+  → Story becomes unavailable and cleanup job removes derived content
+
+LIVE_STARTED
+  → [Live Service] reserves/authorizes stream
+  → LiveKit creates room
+  → Chat worker subscribes/updates presence
+  → RabbitMQ publishes `live.started`
+  → Notification worker sends opt-in notifications
+
+IDENTITY_VERIFICATION_REQUESTED
+  → [Python Verification Worker] calls provider through adapter
+  → Provider liveness/ID callback is signed and deduplicated
+  → [Verification Service] records provider reference and outcome
+  → Only APPROVED grants VERIFIED status
+```
+
+## 4.5 Local Development Architecture
+
+```text
+Docker Compose
+  postgres + redis + rabbitmq + mongodb
+  → NestJS API
+  → Java Spring entitlement/billing service
+  → Python verification/media worker
+  → Node worker (rxjs-rabbitmq)
+  → Next.js web
+  → Stripe CLI forwarding to webhook endpoint
+```
+
+---
+
+# 5. K3s Infrastructure & Resources
+
+## 5.1 Cluster Facts
+
+| Item | Verified Value |
+|---|---|
+| Distro | k3s single control plane |
+| Node | `elitedesk-800` |
+| Capacity | 4 vCPU / approximately 24 GiB RAM |
+| Storage | `local-path`, ReadWriteOnce, WaitForFirstConsumer |
+| Ingress | standalone nginx, class `nginx-external` |
+| DNS/TLS | Cloudflare proxied hostnames; ingress plain HTTP; `ssl-redirect: false` |
+| RabbitMQ | namespace `rabbitmq`, service `rabbitmq.rabbitmq.svc.cluster.local:5672`, management `15672` |
+| Redis | existing Infisical Redis is cluster infrastructure, not HotSpot application Redis |
+| PostgreSQL | existing Infisical PostgreSQL is infrastructure-specific, not application data; HotSpot deploys its own PostgreSQL |
+| Prometheus | namespace `monitoring`, service `kube-prometheus-stack-prometheus.monitoring:9090` |
+| Grafana | `grafana.rmwhs.com` |
+| OpenObserve | `openobserve.rmwhs.com`, service port `5080` |
+| Infisical | `infisical.rmwhs.com` |
+| GitLab | `gitlab.rmwhs.com`, registry `registry.rmwhs.com` |
+| Mailpit | development SMTP `mailpit-smtp.mailpit.svc.cluster.local:25` |
+| Storage capacity | only application-sized PVCs should be declared after local disk review |
+
+No secret values were assumed or copied from existing services. Existing secrets are never read into source, logs, or documentation.
+
+## 5.2 Namespace and Naming Convention
+
+Use:
+
+- namespace: `hotspot`
+- `hotspot-{environment}-{descriptor}` names for Helm/Kubernetes resources
+- local environment namespace may be `hotspot-dev`
+- production namespace `hotspot`
+- ingress hosts must use subdomains and never the apex domain
+
+## 5.3 Standard Tags and Labels
+
+```yaml
+metadata:
+  labels:
+    app.kubernetes.io/name: hotspot
+    app.kubernetes.io/instance: <release>
+    app.kubernetes.io/part-of: hotspot
+    environment: <environment>
+```
+
+Application workloads also use Terraform-independent manifest annotations when Helm-generated resources apply.
+
+## 5.4 Resource Inventory
+
+| Service | Namespace | Purpose | Initial Deployment Shape |
+|---|---|---|---|
+| HotSpot Web | `hotspot` | Next.js UI | 1 replica, CPU/RAM limits |
+| HotSpot API | `hotspot` | NestJS public/admin API | 1 replica |
+| Identity Service | `hotspot` | Python verification/identity adapter | 1 replica + worker |
+| Entitlement Service | `hotspot` | Java Spring billing/entitlement domain | 1 replica |
+| Media Worker | `hotspot` | Python asset processing | 1 replica |
+| Event Workers | `hotspot` | NestJS/RxJS RabbitMQ workers | 1 replica |
+| PostgreSQL | `hotspot` | canonical relational data | 1 pod, 10–20 Gi PVC |
+| MongoDB | `hotspot` | media metadata/chat/live documents | 1 pod, 10 Gi PVC |
+| Redis | `hotspot` | cache, sessions, presence, rate limits | 1 pod, 1–2 Gi PVC only if persistence needed |
+| RabbitMQ | existing `rabbitmq` | shared broker; separate credentials/vhost | existing 5 Gi service |
+| Object Storage | `hotspot` | media/S3-compatible object storage | 1 pod, 50–100 Gi PVC |
+| LiveKit | `hotspot` | WebRTC signaling/SFU | 1 pod if cluster ingress supports WebRTC |
+| Trivy Operator | `trivy-system` | runtime vulnerability and misconfiguration reports | 1 deployment, low-resource profile |
+| GitLab | existing | source and container registry | reuse |
+| Infisical | existing | secrets operator/source | reuse |
+| Prometheus/Grafana | existing `monitoring` | metrics and dashboards | reuse |
+| OpenObserve | existing `openobserve` | logs and collector pipeline | reuse |
+
+## 5.5 RabbitMQ Topology
+
+HotSpot uses a dedicated vhost and credentials. Use `hotspot.events` topic exchange and `hotspot.media`, `hotspot.notifications`, `hotspot.billing`, `hotspot.verification`, `hotspot.live`, and `hotspot.cleanup` durable queues. Every queue gets a corresponding `.retry` and `.dlq` topology.
+
+Node.js workers use `rxjs-rabbitmq`, explicit message types, durable publish options, ack-after-success, bounded retry helper usage, dead-letter setup, and metrics. Python/Java workers use supported AMQP clients unless the project has a verified language adapter.
+
+## 5.6 Kubernetes Resources
+
+Each workload declares:
+
+- `Deployment` or `StatefulSet`
+- `Service`
+- `Ingress`/Gateway route
+- `ServiceAccount`
+- namespace `Role` and `RoleBinding`
+- `ConfigMap`
+- `Secret` reference only
+- readiness/liveness probes
+- CPU/memory requests and limits
+- `PodDisruptionBudget` only after replica counts justify it
+
+The application uses `nginx-external` and `ssl-redirect: false`. Cloudflare handles public TLS. The production hostnames are `hotspot.rmwhs.com` and `api.hotspot.rmwhs.com`.
+
+## 5.7 Secrets
+
+Runtime secrets are stored in Infisical or namespace Kubernetes Secrets and mounted by reference. Required secret groups:
+
+- `database/postgres`
+- `database/mongodb`
+- `redis/credentials`
+- `rabbitmq/hotspot-vhost`
+- `object-storage/minio`
+- `stripe/api-secret`
+- `stripe/webhook-secret`
+- `stripe/connect-secret`
+- `identity/provider`
+- `jwt/signing`
+- `livekit/live`
+- `smtp/production`
+- `gitlab/deploy-token`
+
+## 5.8 IAM and Service Accounts
+
+One namespace-scoped CI ServiceAccount and Role are required for HotSpot deploys. The deploy role can create/update Deployments, StatefulSets, Services, Ingresses, ConfigMaps, Secrets, and ServiceAccounts only in `hotspot`. It cannot read cluster-admin resources or other namespaces.
+
+Runtime ServiceAccounts are workload-specific and never share credentials.
+
+---
+
+# 6. Software Design
+
+## 6.1 Repository Structure
+
+```text
+HotSpot/
+  PROJECT.md
+  CLAUDE.md
+  README.md
+  CHANGELOG.md
+  docker-compose.yml
+  package.json
+  apps/
+    web/
+    api-nest/
+  services/
+    entitlement-spring/
+    identity-python/
+    media-python/
+  workers/
+    notification-node/
+    cleanup-node/
+  packages/
+    contracts/
+    auth/
+    rabbitmq/
+  prisma/
+    schema.prisma
+    migrations/
+  mongo/
+    indexes/
+  k8s/
+    namespace.yaml
+    configmap.yaml
+    secrets.example.yaml
+    deployments/
+    services/
+    ingress/
+    rbac/
+  infra/
+    terraform/
+    values/
+  ci/
+    build.sh
+    test.sh
+    deploy.sh
+  scripts/
+    bootstrap.sh
+    seed-local.sh
+    stripe-listener.sh
+  tests/
+    integration/
+    e2e/
+```
+
+## 6.2 Service Layer Actions
+
+```typescript
+type ServiceAction =
+  | { action: 'registerUser'; payload: RegisterUserInput }
+  | { action: 'verifyEmail'; payload: VerifyEmailInput }
+  | { action: 'startIdentityVerification'; payload: StartIdentityVerificationInput }
+  | { action: 'completeIdentityVerification'; payload: CompleteIdentityVerificationInput }
+  | { action: 'createPost'; payload: CreatePostInput }
+  | { action: 'createReply'; payload: CreateReplyInput }
+  | { action: 'repostPost'; payload: RepostPostInput }
+  | { action: 'quotePost'; payload: QuotePostInput }
+  | { action: 'deletePost'; payload: DeletePostInput }
+  | { action: 'uploadMedia'; payload: UploadMediaInput }
+  | { action: 'publishMediaPost'; payload: PublishMediaPostInput }
+  | { action: 'createStory'; payload: CreateStoryInput }
+  | { action: 'expireStory'; payload: ExpireStoryInput }
+  | { action: 'createStitch'; payload: CreateStitchInput }
+  | { action: 'createDuet'; payload: CreateDuetInput }
+  | { action: 'followAccount'; payload: FollowAccountInput }
+  | { action: 'createCreatorTier'; payload: CreateCreatorTierInput }
+  | { action: 'subscribeToCreator'; payload: SubscribeToCreatorInput }
+  | { action: 'createPlatformCheckout'; payload: CreatePlatformCheckoutInput }
+  | { action: 'processStripeEvent'; payload: ProcessStripeEventInput }
+  | { action: 'createCampaign'; payload: CreateCampaignInput }
+  | { action: 'submitModerationReport'; payload: SubmitModerationReportInput }
+  | { action: 'resolveModerationCase'; payload: ResolveModerationCaseInput }
+  | { action: 'createLiveStream'; payload: CreateLiveStreamInput }
+  | { action: 'startLiveStream'; payload: StartLiveStreamInput }
+  | { action: 'endLiveStream'; payload: EndLiveStreamInput };
+```
+
+## 6.3 Tech Stack
+
+| Layer | Technology | Responsibility |
+|---|---|---|
+| Web | Next.js, React, TypeScript | responsive web UI and SSR |
+| State/API client | TanStack Query, typed OpenAPI client | server-state and API contracts |
+| Public API/BFF | NestJS + TypeScript | auth, social graph, posts, media API, WebSocket gateway |
+| Billing/entitlements | Java 21 Spring Boot | transactional billing, Stripe adapters, entitlement domain |
+| Verification/media | Python 3.12 FastAPI workers | provider adapters, asset processing, moderation helpers |
+| Relational DB | PostgreSQL + Prisma or typed SQL | canonical accounts, graph, posts, subscriptions, audits |
+| Media/chat metadata | MongoDB | media derivatives, chat records, live metadata, short-lived documents |
+| Cache/presence | Redis | cache, rate limiting, live presence, temporary sessions |
+| Broker | RabbitMQ + `rxjs-rabbitmq` | durable async event delivery and Node workers |
+| Object storage | SeaweedFS | original and transcoded media |
+| Live | LiveKit | WebRTC ingest, room, chat support, VOD hooks |
+| Payments | Stripe Checkout, Billing, Connect | platform tiers and creator subscriptions |
+| Identity verification | Provider-adapter design; no provider hardcoded | verification and liveness outcome |
+| Email | SMTP; Mailpit locally | transactional delivery |
+| Metrics | Prometheus/Grafana | infrastructure and application metrics |
+| Logs/traces | OpenObserve collector | structured logs and traces |
+| Secrets | Infisical/Kubernetes Secrets | runtime credentials |
+| IaC | Kubernetes manifests and optional Helm | repeatable deployment |
+| CI/CD | GitLab CI, kaniko/buildah | build/push/deploy |
+
+## 6.4 Data Access Rule
+
+- PostgreSQL access is allowed only in `src/db/queries/**` or service repository implementations.
+- MongoDB access is allowed only in media/chat repository implementations.
+- Redis access is allowed only in cache/presence repository adapters.
+- RabbitMQ publishing is allowed only through an event-port implementation and not directly in route handlers.
+- HTTP dispatchers contain transport parsing and service invocation only.
+
+---
+
+# 7. Data Model
+
+## 7.1 PostgreSQL Tables
+
+Representative production DDL. Exact migrations are generated during implementation.
+
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  handle TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  password_hash TEXT,
+  status TEXT NOT NULL DEFAULT 'pending_verification',
+  identity_verification_status TEXT NOT NULL DEFAULT 'pending',
+  identity_verification_ref TEXT,
+  first_week_trial_started_at TIMESTAMPTZ,
+  first_week_trial_expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX users_handle_unique ON users (lower(handle));
+CREATE UNIQUE INDEX users_email_unique ON users (lower(email));
+CREATE INDEX users_status_idx ON users (status);
+
+CREATE TABLE verification_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  provider TEXT NOT NULL,
+  provider_subject TEXT,
+  provider_session_ref TEXT,
+  status TEXT NOT NULL,
+  failure_code TEXT,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX verification_sessions_user_idx ON verification_sessions (user_id);
+CREATE INDEX verification_sessions_status_idx ON verification_sessions (status);
+
+CREATE TABLE posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id UUID NOT NULL REFERENCES users(id),
+  post_type TEXT NOT NULL,
+  body TEXT,
+  parent_post_id UUID REFERENCES posts(id),
+  thread_root_id UUID REFERENCES posts(id),
+  visibility TEXT NOT NULL DEFAULT 'public',
+  status TEXT NOT NULL DEFAULT 'draft',
+  published_at TIMESTAMPTZ,
+  edited_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX posts_author_published_idx ON posts (author_id, published_at DESC);
+CREATE INDEX posts_thread_root_idx ON posts (thread_root_id, published_at);
+
+CREATE TABLE replies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES posts(id),
+  parent_reply_id UUID REFERENCES replies(id),
+  author_id UUID NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'published',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+CREATE INDEX replies_post_idx ON replies (post_id, created_at);
+CREATE INDEX replies_author_idx ON replies (author_id);
+
+CREATE TABLE follows (
+  follower_id UUID NOT NULL REFERENCES users(id),
+  following_id UUID NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (follower_id, following_id)
+);
+CREATE INDEX follows_following_idx ON follows (following_id);
+
+CREATE TABLE blocks (
+  blocker_id UUID NOT NULL REFERENCES users(id),
+  blocked_id UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+
+CREATE TABLE creator_tiers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  creator_id UUID NOT NULL REFERENCES users(id),
+  name TEXT NOT NULL,
+  description TEXT,
+  stripe_price_id TEXT,
+  monthly_cents INTEGER NOT NULL,
+  currency CHAR(3) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX creator_tiers_creator_idx ON creator_tiers (creator_id);
+
+CREATE TABLE subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscriber_id UUID NOT NULL REFERENCES users(id),
+  creator_id UUID NOT NULL REFERENCES users(id),
+  creator_tier_id UUID REFERENCES creator_tiers(id),
+  platform_tier_id UUID,
+  stripe_subscription_id TEXT,
+  status TEXT NOT NULL,
+  period_start_at TIMESTAMPTZ,
+  period_end_at TIMESTAMPTZ,
+  canceled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX subscriptions_stripe_unique ON subscriptions (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
+CREATE INDEX subscriptions_subscriber_idx ON subscriptions (subscriber_id, status);
+
+CREATE TABLE entitlements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  entitlement_key TEXT NOT NULL,
+  source TEXT NOT NULL,
+  source_ref TEXT,
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX entitlements_active_unique ON entitlements (user_id, entitlement_key, source_ref) WHERE revoked_at IS NULL;
+CREATE INDEX entitlements_lookup_idx ON entitlements (user_id, entitlement_key, ends_at);
+
+CREATE TABLE stripe_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  processed_status TEXT NOT NULL,
+  processed_at TIMESTAMPTZ,
+  failure_reason TEXT,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  advertiser_id UUID NOT NULL REFERENCES users(id),
+  name TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  status TEXT NOT NULL,
+  budget_cents INTEGER NOT NULL,
+  currency CHAR(3) NOT NULL,
+  starts_at TIMESTAMPTZ,
+  ends_at TIMESTAMPTZ,
+  stripe_payment_ref TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX campaigns_advertiser_idx ON campaigns (advertiser_id, created_at DESC);
+
+CREATE TABLE stories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id UUID NOT NULL REFERENCES users(id),
+  media_asset_id UUID NOT NULL,
+  visibility TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX stories_author_expiry_idx ON stories (author_id, expires_at);
+
+CREATE TABLE live_streams (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  creator_id UUID NOT NULL REFERENCES users(id),
+  room_ref TEXT NOT NULL,
+  title TEXT NOT NULL,
+  visibility TEXT NOT NULL,
+  status TEXT NOT NULL,
+  scheduled_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ,
+  ended_at TIMESTAMPTZ,
+  recording_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX live_streams_creator_status_idx ON live_streams (creator_id, status);
+
+CREATE TABLE moderation_cases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  target_type TEXT NOT NULL,
+  target_id UUID NOT NULL,
+  reporter_id UUID REFERENCES users(id),
+  category TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  assigned_moderator_id UUID REFERENCES users(id),
+  resolution TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX moderation_cases_status_idx ON moderation_cases (status, created_at);
+
+CREATE TABLE audit_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id UUID REFERENCES users(id),
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id UUID NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX audit_events_target_idx ON audit_events (target_type, target_id, created_at DESC);
+CREATE INDEX audit_events_actor_idx ON audit_events (actor_id, created_at DESC);
+```
+
+## 7.2 MongoDB Collections
+
+- `media_assets`: object keys, MIME, dimensions, duration, derivatives, processing status, attribution, remix permissions.
+- `media_comments`: comment/reply tree and moderation state.
+- `live_chat_messages`: live stream chat, short TTL or retention policy.
+- `story_views`: story view records, owner-only reporting and bounded retention.
+- `campaign_metrics`: aggregate impression/click/spend rollups.
+- `notification_log`: delivery attempts and provider references.
+
+MongoDB indexes are created with each collection migration and enforce TTL policies for temporary records.
+
+---
+
+# 8. API Documentation
+
+## 8.1 Base URLs
+
+| Environment | API URL | Web URL |
+|---|---|---|
+| Local | `http://api.hotspot.local` | `http://hotspot.local` |
+| Dev | `https://api.dev.hotspot.rmwhs.com` | `https://dev.hotspot.rmwhs.com` |
+| Production | `https://api.hotspot.rmwhs.com` | `https://hotspot.rmwhs.com` |
+
+## 8.2 Response Envelope
+
+```json
+{
+  "success": true,
+  "data": {},
+  "meta": { "cursor": null },
+  "requestId": "uuid"
+}
+```
+
+Errors:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ENTITLEMENT_REQUIRED",
+    "message": "A paid HotSpot tier or active trial is required.",
+    "details": {}
+  },
+  "requestId": "uuid"
+}
+```
+
+## 8.3 Endpoint Groups
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/auth/register` | Register account |
+| POST | `/v1/auth/login` | Start session |
+| POST | `/v1/auth/refresh` | Rotate refresh token |
+| POST | `/v1/auth/logout` | Revoke session |
+| POST | `/v1/identity-verification/sessions` | Start identity verification 🔒 |
+| POST | `/v1/identity-verification/callback` | Signed provider result webhook |
+| GET | `/v1/users/:handle` | Public profile |
+| PATCH | `/v1/users/me` | Update own profile 🔒 |
+| POST | `/v1/users/:id/follow` | Follow or request 🔒 |
+| POST | `/v1/users/:id/block` | Block user 🔒 |
+| POST | `/v1/posts` | Create text post 🔒 |
+| GET | `/v1/posts/:id` | Retrieve post |
+| PATCH | `/v1/posts/:id` | Edit post 🔒 |
+| DELETE | `/v1/posts/:id` | Delete post 🔒 |
+| POST | `/v1/posts/:id/replies` | Reply 🔒 |
+| POST | `/v1/posts/:id/repost` | Repost 🔒 |
+| POST | `/v1/posts/:id/quote` | Quote post 🔒 |
+| POST | `/v1/media/upload-sessions` | Start resumable upload 🔒 |
+| POST | `/v1/media/:id/publish` | Publish processed media 🔒 |
+| POST | `/v1/media/:id/stitch` | Create stitch 🔒 |
+| POST | `/v1/media/:id/duet` | Create duet 🔒 |
+| POST | `/v1/stories` | Publish story 🔒 |
+| GET | `/v1/feeds/following` | Chronological feed 🔒 |
+| GET | `/v1/feeds/public` | Public chronological feed |
+| GET | `/v1/feeds/topics/:topic` | Explicit topic feed |
+| POST | `/v1/creator-tiers` | Create creator tier 🔒 |
+| POST | `/v1/creator-subscriptions/checkout` | Start subscription checkout 🔒 |
+| POST | `/v1/billing/platform/checkout` | Buy platform tier 🔒 |
+| POST | `/v1/stripe/webhooks` | Process signed Stripe webhook |
+| POST | `/v1/campaigns` | Create marketing campaign 🔒 |
+| POST | `/v1/campaigns/:id/submit` | Submit campaign review 🔒 |
+| POST | `/v1/live-streams` | Schedule/start stream 🔒 |
+| POST | `/v1/live-streams/:id/end` | End stream 🔒 |
+| GET | `/v1/live-streams/:id` | Live stream details |
+| POST | `/v1/reports` | Submit report 🔒 |
+| GET | `/v1/admin/moderation/cases` | Moderation queue 🔒 Admin |
+| POST | `/v1/admin/moderation/cases/:id/resolve` | Resolve case 🔒 Admin |
+
+JWT endpoints validate issuer, audience, expiry, revocation state, and account status. Entitlements are enforced server-side and are never trusted from the web client.
+
+## 8.4 Error Codes
+
+| Code | HTTP Status | Meaning |
+|---|---:|---|
+| UNAUTHORIZED | 401 | Missing or invalid session |
+| FORBIDDEN | 403 | Role or account state forbids action |
+| VALIDATION_ERROR | 422 | Invalid input |
+| NOT_FOUND | 404 | Resource absent or hidden |
+| IDENTITY_REQUIRED | 403 | Identity verification is incomplete |
+| ENTITLEMENT_REQUIRED | 402 | Paid tier/trial required |
+| TRIAL_EXPIRED | 402 | Seven-day trial expired |
+| STRIPE_EVENT_DUPLICATE | 200 | Valid but already processed |
+| STRIPE_SIGNATURE_INVALID | 400 | Signature verification failed |
+| MEDIA_PROCESSING | 202 | Upload/derivative is processing |
+| STORY_EXPIRED | 410 | Story expired |
+| BLOCKED_INTERACTION | 403 | Blocking/privacy policy forbids action |
+| REMIX_NOT_ALLOWED | 403 | Source media disallows stitch/duet |
+| LIVE_NOT_AVAILABLE | 403 | Stream not allowed or entitlements absent |
+| INTERNAL_ERROR | 500 | Unexpected server failure |
+
+---
+
+# 9. DevOps & Deployment
+
+## 9.1 Environments
+
+| Environment | Purpose | Compute |
+|---|---|---|
+| Local | Docker Compose developer environment | workstation |
+| Dev | Feature validation on k3s | `hotspot-dev` namespace |
+| Production | Public personal project | `hotspot` namespace |
+
+## 9.2 CI/CD
+
+```text
+GitLab Push
+  → Build stage
+  → Kaniko/buildah image build
+  → Tag: $CI_COMMIT_SHORT_SHA
+  → Push: $CI_REGISTRY_IMAGE/$service:$CI_COMMIT_SHORT_SHA
+  → Test stage
+  → Unit tests
+  → Contract tests
+  → Integration tests
+  → Deploy stage (protected branch/tag)
+  → Scope GitLab deploy SA token
+  → Render Kubernetes manifests
+  → Apply namespace/RBAC/config resources
+  → Set image digest/tag
+  → Wait for rollout
+  → Smoke test
+```
+
+Frontend is built independently and deployed only after API contracts pass. Database migrations run before application rollout and must be backward-compatible for rolling deployments.
+
+## 9.3 Local Deployment
+
+```bash
+cd /home/ryanwaite28/Developer/ai/HotSpot
+docker compose up -d
+npm install
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+## 9.4 Terraform and Manifests
+
+Plain Kubernetes manifests are the default for application workloads. Helm is used only for infrastructure components or third-party stacks. A future Terraform layer may manage DNS, Cloudflare Tunnel configuration, and namespace resources, but it must not own application databases or live credentials.
+
+## 9.5 Build Scripts
+
+The repository must expose:
+
+- `npm run build`
+- `npm run test`
+- `npm run test:integration`
+- `npm run test:e2e`
+- `npm run db:migrate`
+- `npm run db:seed`
+- `npm run deploy:dev`
+- `npm run deploy:prod`
+- `npm run stripe:listen`
+
+## 9.6 Deploy Checklist
+
+- [ ] protected branch deployment
+- [ ] image tagged by commit SHA
+- [ ] no `:latest` image
+- [ ] Secret references verified
+- [ ] resource requests/limits present
+- [ ] readiness/liveness probes present
+- [ ] ingress class `nginx-external`
+- [ ] Cloudflare proxied DNS configured
+- [ ] migration is backward-compatible
+- [ ] Stripe webhook endpoint and signing secret configured
+- [ ] smoke test against public API
+- [ ] GitLab security gates enabled (SAST, Secret, SCA, Container, IaC)
+
+---
+
+# 10. Local Development
+
+## 10.1 Prerequisites
+
+- Docker Engine + Compose
+- Node.js 22 LTS
+- npm/pnpm
+- Java 21
+- Python 3.12
+- PostgreSQL client
+- MongoDB shell
+- Stripe CLI
+- `kubectl`
+- GitLab credentials for registry access
+- Infisical CLI only when using real secret sources
+
+## 10.2 Docker Compose Services
+
+A representative local stack:
+
+- PostgreSQL
+- MongoDB
+- Redis
+- RabbitMQ
+- Mailpit
+- LiveKit or local mock media relay
+- NestJS API
+- Java Entitlement service
+- Python verification/media services
+- Node workers
+- Next.js web
+
+## 10.3 Environment Variables
+
+```dotenv
+APP_ENV=local
+APP_PUBLIC_URL=http://hotspot.local
+API_PUBLIC_URL=http://api.hotspot.local
+POSTGRES_URL=postgresql://hotspot:local-only@postgres:5432/hotspot
+MONGODB_URL=mongodb://mongodb:27017/hotspot
+REDIS_URL=redis://redis:6379
+RABBITMQ_URL=amqp://hotspot:local-only@rabbitmq:5672/hotspot
+OBJECT_STORAGE_ENDPOINT=http://minio:9000
+OBJECT_STORAGE_BUCKET=hotspot-media
+STRIPE_SECRET_KEY=sk_test_replace_me
+STRIPE_WEBHOOK_SECRET=whsec_replace_me
+IDENTITY_PROVIDER_API_KEY=replace_me
+LIVEKIT_API_KEY=replace_me
+LIVEKIT_API_SECRET=replace_me
+JWT_SIGNING_KEY=replace_with_local_test_key
+```
+
+Local values are test-only. Cloud environments use Infisical/Kubernetes Secrets. No example file contains a real credential.
+
+## 10.4 Testing the Core Flow
+
+```bash
+curl -X POST http://api.hotspot.local/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"handle":"demo_user","email":"demo@example.com","password":"..."}'
+
+curl -X POST http://api.hotspot.local/v1/posts \
+  -H 'Authorization: Bearer <access-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"body":"Hello HotSpot","visibility":"public"}'
+
+curl http://api.hotspot.local/v1/feeds/following \
+  -H 'Authorization: Bearer <access-token>'
+
+stripe listen --forward-to http://api.hotspot.local/v1/stripe/webhooks
+```
+
+---
+
+# 11. Implementation Plan
+
+Implementation is divided into controlled, session-sized phases. No phase begins with its successor work unless explicitly required as a dependency.
+
+## Phase 0 — Workspace and Cluster Foundation
+
+- [ ] Confirm repository ownership and GitLab remote
+- [ ] Define namespace, registry, ingress, and deploy SA
+- [ ] Add `.gitlab-ci.yml` skeleton and Kaniko/buildah scripts
+- [ ] Create local Docker Compose dependencies
+- [ ] Add environment variable templates
+- [ ] Add Infisical/Kubernetes Secret references
+- [ ] Add Prometheus/OpenObserve labels and dashboards
+- [ ] Add `CLAUDE.md`
+- [ ] Verify RabbitMQ vhost, credentials, and service DNS separately
+- [ ] Verify local-path storage and disk capacity
+
+## Phase 1 — Identity and Security Foundation
+
+- [ ] Create PostgreSQL schema for users, sessions, and verification
+- [ ] Implement registration and email verification
+- [ ] Implement JWT/refresh/passkey foundation
+- [ ] Implement account status and RBAC
+- [ ] Implement identity-verification provider adapter
+- [ ] Implement signed verification callback and deduplication
+- [ ] Implement trial entitlement activation exactly once
+- [ ] Add account deactivation/export/delete workflow
+- [ ] Unit test every auth/identity service method
+
+## Phase 2 — Profiles and Social Graph
+
+- [ ] Implement profile CRUD and handle uniqueness
+- [ ] Implement follow, unfollow, request, approve, block, mute
+- [ ] Implement account privacy and follower list visibility
+- [ ] Implement cursor pagination
+- [ ] Implement relationship service unit/integration tests
+- [ ] Add profile and relationship API route contracts
+
+## Phase 3 — Text Posts and Threads
+
+- [ ] Implement post creation/draft/schedule/edit/delete/pin
+- [ ] Implement reply and thread-root relationships
+- [ ] Implement repost and quote operations
+- [ ] Implement like, bookmark, and share counters
+- [ ] Implement chronological following/public/topic feed
+- [ ] Implement post privacy and block checks
+- [ ] Add full text-post test suite
+
+## Phase 4 — Media Foundation
+
+- [ ] Add object-storage upload session
+- [ ] Add MongoDB media metadata collection
+- [ ] Implement resumable upload/size/MIME validation
+- [ ] Implement Python media processor worker
+- [ ] Implement RabbitMQ processing queue with DLQ
+- [ ] Implement thumbnail/transcode/status contract
+- [ ] Implement alt text and photo carousels
+- [ ] Implement media comments/replies
+- [ ] Add media integration tests
+
+## Phase 5 — Stories
+
+- [ ] Implement story creation and 24-hour expiry
+- [ ] Implement story visibility and viewer records
+- [ ] Implement delayed cleanup and story reply delivery
+- [ ] Implement MongoDB TTL or cleanup worker
+- [ ] Test exact expiry and hidden/deleted behavior
+
+## Phase 6 — Stitch and Duet
+
+- [ ] Implement remix permission on media assets
+- [ ] Implement derivative relationship model
+- [ ] Implement stitch timeline assembly contract
+- [ ] Implement duet split-screen contract
+- [ ] Enforce source author attribution and takedown propagation
+- [ ] Add derivative media processing tests
+
+## Phase 7 — Stripe and Entitlements
+
+- [ ] Implement Java Spring billing/entitlement service
+- [ ] Implement platform tier catalog
+- [ ] Implement Stripe Checkout for tiers
+- [ ] Implement Stripe webhook signature verification and deduplication
+- [ ] Implement entitlement grants/revokes and audit events
+- [ ] Implement trial expiry worker
+- [ ] Implement billing API and unit/integration tests
+- [ ] Add Stripe local CLI flow
+
+## Phase 8 — Creator Subscriptions
+
+- [ ] Implement creator tier CRUD
+- [ ] Implement Stripe Connect account setup and payout adapter
+- [ ] Implement creator subscription checkout
+- [ ] Implement tier-specific featured content
+- [ ] Implement subscription access checks
+- [ ] Implement subscriber management and cancellation
+- [ ] Test refunds/disputes/renewals
+
+## Phase 9 — Marketing and Ads
+
+- [ ] Implement campaign model and policy states
+- [ ] Implement entitlement gate and paid-feature trial gate
+- [ ] Implement campaign budget and placement validation
+- [ ] Implement aggregate metrics and reporting
+- [ ] Implement clearly labeled sponsor placement
+- [ ] Implement ad policy/moderation review
+- [ ] Prohibit sensitive and PII targeting
+- [ ] Add campaign tests
+
+## Phase 10 — Live Streaming
+
+- [ ] Deploy and isolate LiveKit
+- [ ] Implement stream scheduling/start/end
+- [ ] Implement short-lived publishing credentials
+- [ ] Implement viewer entitlement enforcement
+- [ ] Implement live chat and moderation
+- [ ] Implement follower/subscriber-only rooms
+- [ ] Implement opt-in recording and VOD visibility
+- [ ] Add live lifecycle tests
+
+## Phase 11 — Notifications and Moderation
+
+- [ ] Implement notification preference model
+- [ ] Implement RabbitMQ notification queues
+- [ ] Implement transactional email templates
+- [ ] Implement report/case lifecycle
+- [ ] Implement admin moderation dashboard
+- [ ] Implement appeals and audit event export
+- [ ] Implement fake/bot account escalation workflows
+- [ ] Add worker failure/retry/DLQ tests
+
+## Phase 12 — Frontend MVP
+
+- [ ] Build authentication and verification screens
+- [ ] Build profile and social graph screens
+- [ ] Build text compose/thread/reply/repost/quote screens
+- [ ] Build photo/video upload and comments
+- [ ] Build chronological feed and story experience
+- [ ] Build subscriptions and Stripe Checkout screens
+- [ ] Build campaign management screen
+- [ ] Build live stream room and chat UI
+- [ ] Build settings/privacy/moderation/account deletion screens
+- [ ] Run accessibility and E2E tests
+
+## Phase 13 — Production Hardening
+
+- [ ] Add deployment probes and pod resource limits
+- [ ] Add backup scripts for PostgreSQL/MongoDB/media metadata
+- [ ] Add Grafana dashboards and Alertmanager rules
+- [ ] Add OpenObserve log parsing and trace correlation
+- [ ] Add data export/delete retention jobs
+- [ ] Add security and dependency scans
+- [ ] Add load and failure testing
+- [ ] Document recovery and rollback
+- [ ] Add production smoke test and release checklist
+
+## Final Definition of Done
+
+No phase is complete until code, migrations, tests, RBAC, resource limits, docs, and deployment evidence exist. Each AI session should implement only the current phase and leave a resume-ready summary in `CHANGELOG.md`.
+
+---
+
+# 12. Project Rules & AI-IDE Guidelines
+
+1. **Service Layer Supremacy** — all business logic lives in service modules; handlers only parse transport input and call service/repository functions.
+2. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules.
+3. **No secrets in code** — environment variables, Infisical, Kubernetes Secrets, and CI variables only.
+4. **TypeScript strict mode** — no `any`, implicit returns, or unsafe casts without a documented boundary.
+5. **Java/Python strict typing** — domain and API contracts use explicit types and schemas.
+6. **Error handling** — transport errors map typed domain errors; no unhandled promise rejections or silent failures.
+7. **Idempotency** — every write with replay risk must enforce a key or immutable event ID.
+8. **Tests** — every service function has unit coverage and every major flow has integration coverage.
+9. **Migrations** — never edit a migration after use; create a new migration.
+10. **Environment parity** — use the same adapters and event contracts locally and in Kubernetes.
+11. **No ML ranking** — do not add predictive feed ranking or behavioral personalization.
+12. **No personal-data sales** — do not implement broker, identity reselling, or unauthorized profile sharing.
+13. **No fake accounts or bots** — creation, identity, and moderation boundaries must remain explicit.
+14. **No plaintext Stripe credentials** — webhook and API secrets come from Secret references.
+15. **One phase per AI session** — do not jump to later implementation phases without explicit approval.
+16. **No unauthorized infrastructure edits** — cluster resources require documented deploy scripts and verification.
+17. **No migration to cloud** — no AWS-specific implementation is required unless a future document explicitly changes scope.
+18. **Resume by changelog** — update `CHANGELOG.md` after each implementation session with completed work, unresolved work, and verification evidence.
+
+AI tools must not:
+
+- generate handlers containing business logic;
+- call PostgreSQL/Redis/MongoDB directly from route or event handlers;
+- copy existing cluster passwords or secret values;
+- introduce ML ranking or hidden recommendation behavior;
+- sell or export personal data;
+- permit public posting before verification;
+- grant Stripe entitlements solely from a browser request;
+- modify this specification through implementation convenience without updating `PROJECT.md`;
+- create a workload without resource requests/limits and probes;
+- use `:latest` image tags in production;
+- edit migrations already applied;
+- deploy privileged containers or Docker-in-Docker;
+- add new architectural patterns not defined here.
+
+---
+
+# 13. Infrastructure Cost Estimates
+
+## Home Server Portfolio Deployment
+
+| Area | Monthly Estimate | Notes |
+|---|---:|---|
+| Existing cluster hardware | €0 incremental planning cost / power varies | k3s already installed |
+| Domain/DNS | existing rmwhs.com cost | Cloudflare + domain |
+| GitLab | existing namespace | reuse |
+| PostgreSQL/MongoDB/Redis/RabbitMQ | near-zero incremental | PVC + existing resources |
+| Object storage | near-zero incremental | local storage, capacity-limited |
+| LiveKit | near-zero incremental | bandwidth/power is principal cost |
+| Stripe | transaction fees | no fee when no sale |
+| Identity verification | provider dependent | pay-per-verification possible |
+| Email | existing SMTP/provider | local Mailpit for development |
+| Monitoring | existing | Prometheus/Grafana/OpenObserve reused |
+| Power/network | hardware-dependent | dominant at-rest cost |
+| Backups | existing disk/cloud optional | primary risk is local disk loss |
+
+## Larger Production Reference
+
+| Area | Monthly Estimate | Notes |
+|---|---:|---|
+| Kubernetes compute | external cluster cost | based on node count |
+| Managed PostgreSQL | service dependent | HA and backups drive cost |
+| MongoDB managed tier | service dependent | only if self-hosted is not acceptable |
+| Redis managed tier | service dependent | HA/cache capacity |
+| Object storage/CDN | usage dependent | largest media transfer cost |
+| Live streaming | minutes/egress dependent | major under-load cost |
+| Identity verification | per successful/attempt fee | principal compliance cost |
+| Stripe | percentage/transaction | commercial transaction cost |
+| Monitoring | log/trace ingestion | principal observability cost |
+
+Cost trade-off: at-rest cost is driven by storage, identity/live infrastructure, and power. Under-load cost is driven by media ingest/transcode, live-stream bandwidth, Stripe, logs, object storage, and data transfer.
+
+---
+
+# 14. Testing Plan
+
+## 14.1 Unit Tests
+
+- Vitest for NestJS and Node workers.
+- JUnit/Spring tests for Java billing/entitlement services.
+- pytest for Python verification/media services.
+- Mock PostgreSQL, MongoDB, Redis, Stripe, identity-provider, object-storage, RabbitMQ, and LiveKit ports.
+- Every service function has an isolated unit test.
+
+## 14.2 Integration Tests
+
+- PostgreSQL in Docker/Testcontainers or a disposable local database.
+- MongoDB, Redis, RabbitMQ, and object storage containers for real protocol behavior.
+- Stripe test mode with webhook signatures.
+- Real RabbitMQ retry, ack, nack, DLQ, and reconnect behavior.
+- Identity provider sandbox only.
+- LiveKit test room or explicit integration stub.
+
+## 14.3 End-to-End Tests
+
+- register → verify email → complete identity verification → receive trial;
+- create post → reply → repost → quote;
+- upload photo/video → process → comment;
+- create story → wait/force expiry → verify inaccessible;
+- stitch/duet source with permission and source without permission;
+- buy platform tier → Stripe webhook → entitlement grant;
+- expire/refund/cancel subscription → entitlement removed;
+- creator tier subscription → subscriber-only content access;
+- create/pause/cancel campaign;
+- report → moderation case → resolution → appeal;
+- start/end live stream → viewer entitlement enforcement;
+- account export and deletion.
+
+## 14.4 Test Data Strategy
+
+- deterministic seed users, handles, posts, creator tiers, media metadata, and moderation cases;
+- synthetic identities and provider callbacks only;
+- no real identity documents or personal user data;
+- Stripe test fixture objects and signed test webhook events;
+- fixed test clock for 7-day trials and 24-hour story expiry;
+- generated media fixtures for small photo/video processing tests.
+
+## 14.5 CI Test Execution
+
+- every merge request: lint, unit, contract, and service tests;
+- protected branch: integration tests and migration dry-run;
+- release: E2E smoke and deploy to the `hotspot-dev` namespace;
+- production deploy: migration/rollout, health checks, Stripe webhook health, public smoke test;
+- release rollback: redeploy prior image tag and do not reverse successful database migrations unless a rollback migration exists.
