@@ -5,11 +5,13 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "esModuleInterop": true,
+    "types": ["node"],
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
   "include": [
     "apps/**/*.ts",
-    "packages/**/*.ts"
+    "packages/**/*.ts",
+    "workers/**/*.ts"
   ]
 }

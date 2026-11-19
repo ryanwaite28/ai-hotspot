@@ -1,7 +1,4 @@
-declare const require: (moduleName: string) => any;
-declare const Buffer: any;
-
-const { createHmac } = require('crypto');
+import { createHmac } from 'node:crypto';
 
 export interface EmailVerificationTokenPayload {
   userId: string;

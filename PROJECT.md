@@ -251,6 +251,7 @@ HotSpot demonstrates an ethically scoped, verifiable, deployable social platform
 - **FR-NOTIF-03**: Notification delivery is event-driven and retries with a bounded exponential backoff.
 - **FR-NOTIF-04**: Email types: Verification, Password Reset, Welcome, Trial Expiring, Trial Expired, Subscription Purchased, Subscription Renewed, Subscription Canceled, Refund, Campaign Approved, Campaign Rejected, Report Received, Moderation Action, and Live Stream Started.
 - **FR-NOTIF-05**: Notification preferences are enforced before queue publication and at delivery time.
+- **FR-NOTIF-06**: Domain-event subscribers (for example `user.created` and `user.email-reset-requested`) invoke a shared email service contract with template id and template parameters rather than embedding SMTP logic in subscribers.
 
 ## 2.12 Trust, Safety, and Administration
 
@@ -296,6 +297,10 @@ HotSpot demonstrates an ethically scoped, verifiable, deployable social platform
 - **NFR-16** — No rank training: no engagement prediction model or opaque ML personalization ranking is implemented.
 - **NFR-17** — Security of uploads: object keys are non-guessable, upload URLs are short-lived, and content types are revalidated after upload.
 - **NFR-18** — Controlled rollout: each feature phase is independently deployable and toggled by feature flag where practical.
+- **NFR-19** — Mutation eventing: every durable state mutation originating from create/update/delete commands emits a domain event through a service-level event port.
+- **NFR-20** — Delivery guarantees: mutation events use at-least-once delivery with deduplication support (`event_id`, `aggregate_id`, `version`, `occurred_at`) and outbox-backed publication.
+- **NFR-21** — Transactional consistency: database writes and outbox record creation occur in one transaction; asynchronous publisher workers deliver outbox records to RabbitMQ.
+- **NFR-22** — Type completeness: TypeScript and Python source must use explicit, concrete types for contracts and data flow; do not use weak placeholder types (`any`, `unknown`, `object`, `Record<string, unknown>`, `dict`, `Dict[...]`, `Any`, `typing.Any`) in service/domain/repository/handler code.
 
 ---
 
@@ -305,11 +310,18 @@ HotSpot demonstrates an ethically scoped, verifiable, deployable social platform
 
 HotSpot uses a dispatch/service split:
 
-- **Dispatch Layer** — NestJS API, Spring Security/Billing services, Python verification/asset workers, and RabbitMQ consumers parse transport input and call typed application services.
-- **Service Layer** — domain services own validation, entitlement decisions, transactions, event publication, and side effects.
+- **Dispatch Layer (Gateways/Adapters only)** — ingress/API gateways, controllers/handlers, webhook receivers, worker consumers, and schedulers parse transport input, call typed service contracts, and map outputs.
+- **Orchestration Layer (Use-case coordinators in service modules)** — application workflow coordinators sequence multi-step business use cases across repositories, domain services, transactions, and event publication.
+- **Service Layer (Microservices/Domain services only)** — domain services inside HotSpot microservices own validation, entitlement decisions, transactions, event publication, and side effects. Gateway/transport adapters are never part of this layer.
 
 > ⚠ **Service Layer Supremacy — Core Architectural Rule**  
 > No route, worker, Lambda-style handler, scheduled job, or GraphQL resolver may contain business rules or direct data access outside the architecture's service/query contracts. A transport layer is replaceable and intentionally thin.
+
+Dispatch examples for this repository: `apps/api-nest/src/handlers/**`, RabbitMQ consumer adapters, Stripe webhook endpoints, and scheduled-trigger adapters.
+
+Orchestration examples for this repository: auth registration/session lifecycle coordination in `apps/api-nest/src/service/**` use-case services.
+
+Service-layer examples for this repository: `apps/api-nest/src/service/**`, Java entitlement domain services, and Python identity/media domain services.
 
 ## 4.2 Production Architecture
 
@@ -376,7 +388,18 @@ Internet
 | Backups | Scheduled dumps/PVC snapshots | Point-in-time backup/object replication |
 | Cost | Existing hardware + power/domain | Variable managed-service cost |
 
-## 4.4 Async Event Flow
+## 4.4 Mutation Eventing and Async Event Flow
+
+All state-changing service commands (create/update/delete) must emit domain events so downstream services can react without synchronous coupling.
+
+Required rules:
+
+- Dispatch adapters call service contracts only; they never publish RabbitMQ messages directly.
+- Service-layer orchestration writes durable state and an outbox record in the same transaction.
+- Publisher workers read pending outbox records and publish to RabbitMQ exchanges.
+- Subscribers are idempotent and deduplicate using stable event identifiers.
+- Event names are domain-scoped and action-scoped, for example: `user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`.
+- Notification/email workers subscribe to these events and call a shared email service with `(templateId, templateParams, recipient)`.
 
 ```text
 MEDIA_UPLOAD_COMPLETED
@@ -413,6 +436,18 @@ IDENTITY_VERIFICATION_REQUESTED
   → Provider liveness/ID callback is signed and deduplicated
   → [Verification Service] records provider reference and outcome
   → Only APPROVED grants VERIFIED status
+
+USER_CREATED
+  → [User Service] writes user record + outbox event in one transaction
+  → [Outbox Publisher] publishes `user.created` to RabbitMQ
+  → [Notifications Worker] handles `user.created`
+  → [Email Service Adapter] sends welcome template
+
+USER_EMAIL_RESET_REQUESTED
+  → [Auth/User Service] writes reset request + outbox event in one transaction
+  → [Outbox Publisher] publishes `user.email-reset-requested`
+  → [Notifications Worker] handles reset-requested event
+  → [Email Service Adapter] sends verification template
 ```
 
 ## 4.5 Local Development Architecture
@@ -503,6 +538,15 @@ Application workloads also use Terraform-independent manifest annotations when H
 ## 5.5 RabbitMQ Topology
 
 HotSpot uses a dedicated vhost and credentials. Use `hotspot.events` topic exchange and `hotspot.media`, `hotspot.notifications`, `hotspot.billing`, `hotspot.verification`, `hotspot.live`, and `hotspot.cleanup` durable queues. Every queue gets a corresponding `.retry` and `.dlq` topology.
+
+All mutable backend services (NestJS API service modules, Java entitlement/billing service, Python identity/media services, and Node workers that own persistent state mutations) must integrate with RabbitMQ through a shared event-port abstraction and outbox publisher path. The web frontend must not connect directly to RabbitMQ.
+
+Routing-key convention uses dotted domain events:
+
+- `user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`
+- `post.created`, `post.updated`, `post.deleted`
+- `media.created`, `media.updated`, `media.deleted`
+- `subscription.created`, `subscription.updated`, `subscription.canceled`
 
 Node.js workers use `rxjs-rabbitmq`, explicit message types, durable publish options, ack-after-success, bounded retry helper usage, dead-letter setup, and metrics. Python/Java workers use supported AMQP clients unless the project has a verified language adapter.
 
@@ -610,8 +654,12 @@ HotSpot/
 type ServiceAction =
   | { action: 'registerUser'; payload: RegisterUserInput }
   | { action: 'verifyEmail'; payload: VerifyEmailInput }
+  | { action: 'requestEmailReset'; payload: RequestEmailResetInput }
   | { action: 'startIdentityVerification'; payload: StartIdentityVerificationInput }
   | { action: 'completeIdentityVerification'; payload: CompleteIdentityVerificationInput }
+  | { action: 'publishOutboxBatch'; payload: PublishOutboxBatchInput }
+  | { action: 'handleUserCreated'; payload: UserCreatedEvent }
+  | { action: 'handleUserEmailResetRequested'; payload: UserEmailResetRequestedEvent }
   | { action: 'createPost'; payload: CreatePostInput }
   | { action: 'createReply'; payload: CreateReplyInput }
   | { action: 'repostPost'; payload: RepostPostInput }
@@ -666,7 +714,74 @@ type ServiceAction =
 - MongoDB access is allowed only in media/chat repository implementations.
 - Redis access is allowed only in cache/presence repository adapters.
 - RabbitMQ publishing is allowed only through an event-port implementation and not directly in route handlers.
+- Event publication for create/update/delete mutations must use outbox-backed service orchestration and not inline best-effort publish from transport handlers.
 - HTTP dispatchers contain transport parsing and service invocation only.
+
+## 6.5 Outbox Pattern Standard
+
+### 6.5.1 Purpose
+
+Guarantee that every durable create/update/delete mutation can be reacted to by downstream domains without losing events during process crash, network failure, or broker outage.
+
+### 6.5.2 Event Envelope
+
+All domain events published from outbox records use this canonical envelope:
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "user.created",
+  "aggregateType": "user",
+  "aggregateId": "uuid",
+  "aggregateVersion": 1,
+  "occurredAt": "2026-11-19T00:00:00.000Z",
+  "payload": {},
+  "headers": {
+    "schemaVersion": 1,
+    "producer": "hotspot-api"
+  }
+}
+```
+
+### 6.5.3 Outbox State Lifecycle
+
+1. Service orchestration writes domain mutation and outbox row in one DB transaction.
+2. Outbox row starts as `published_at IS NULL`, `publish_attempts = 0`.
+3. Publisher worker reads oldest unpublished rows in bounded batches.
+4. On successful RabbitMQ publish: set `published_at = NOW()`.
+5. On failure: increment `publish_attempts`, leave row unpublished for retry.
+6. When retry threshold is exceeded, publish to a `.dlq` route and mark outcome via alerting policy.
+
+### 6.5.4 Publisher Worker Contract
+
+- Poll interval is bounded and configurable.
+- Batch size is bounded and configurable.
+- Publisher acks only after broker confirms durable publish.
+- Publisher is idempotent and safe for concurrent worker replicas.
+
+### 6.5.5 Subscriber Contract
+
+- Subscribers are idempotent and persist consumed `event_id` keys.
+- Subscribers must treat event delivery as at-least-once.
+- Subscriber handlers call domain services or shared adapters (for example email service), not transport utilities directly.
+
+### 6.5.6 Notification and Email Use Case
+
+- `user.created` subscriber calls shared email service with `templateId = welcome_email`.
+- `user.email-reset-requested` subscriber calls shared email service with `templateId = email_reset_verification`.
+- Template inputs are explicit structured fields (`templateParams`) and never freeform interpolated SQL/HTML from event payload.
+
+### 6.5.7 Rollout Scope Rule
+
+Start with auth/user events in Phase 1, then expand by bounded context in later phases. Do not require all services to migrate in one release.
+
+## 6.6 Project Use Cases: Event-Driven Reactions
+
+1. User registration creates account and outbox event `user.created`; notification worker sends welcome email.
+2. User email reset request emits `user.email-reset-requested`; notification worker sends verification/reset email.
+3. User suspension action emits `user.suspended`; downstream services revoke active sessions and notification channels.
+4. Post deletion emits `post.deleted`; feed/cache subscribers remove stale references.
+5. Subscription cancellation emits `subscription.canceled`; entitlement subscribers revoke capability access.
 
 ---
 
@@ -812,6 +927,22 @@ CREATE TABLE stripe_events (
   failure_reason TEXT,
   received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE domain_event_outbox (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id TEXT NOT NULL UNIQUE,
+  aggregate_type TEXT NOT NULL,
+  aggregate_id UUID NOT NULL,
+  aggregate_version BIGINT,
+  event_type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  headers JSONB NOT NULL DEFAULT '{}',
+  occurred_at TIMESTAMPTZ NOT NULL,
+  published_at TIMESTAMPTZ,
+  publish_attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX domain_event_outbox_unpublished_idx ON domain_event_outbox (published_at, created_at);
 
 CREATE TABLE campaigns (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1089,6 +1220,58 @@ The repository must expose:
 - [ ] GitLab security gates enabled (SAST, Secret, SCA, Container, IaC)
 - [ ] If ArgoCD is enabled: CI direct apply disabled for Argo-managed resources
 
+## 9.8 GitLab-K3s Integration Transition Plan
+
+### 9.8.1 Goal
+
+Introduce GitLab-to-k3s integrations in controlled phases that improve deploy security, environment visibility, and traceability without adding controller conflict or violating existing architecture rules.
+
+### 9.8.2 Non-Goals
+
+- No immediate switch to ArgoCD as deploy authority.
+- No cluster-admin credentials in GitLab CI.
+- No replacement of service-layer architecture boundaries.
+
+### 9.8.3 Guardrails
+
+- Keep one active deploy authority per workload set.
+- Use namespace-scoped ServiceAccounts and RoleBindings only.
+- Keep immutable image references (`$CI_COMMIT_SHORT_SHA` or digest).
+- Use pull-safe patterns where possible for tunnel/NAT-constrained environments.
+
+### 9.8.4 Phased Rollout
+
+| Phase | Scope | Delivery | Exit Criteria |
+|---|---|---|---|
+| G0 | Baseline SCM and CI linkage | GitLab remote/registry/deploy scripts are active | push/pull works; pipeline can deploy to `hotspot-dev` |
+| G1 | GitLab Agent visibility only | Install GitLab Kubernetes Agent with read-focused namespace scope | GitLab environments show cluster state without CI kubeconfig broadening |
+| G2 | Secure deployment metadata | Publish deployment metadata and environment status in GitLab | commit-to-environment traceability and rollout evidence are visible |
+| G3 | Optional pull-based app delivery | Move selected app workloads to Agent pull-based apply | protected branch change reconciles in-cluster with scoped permissions |
+| G4 | Optional GitOps controller adoption | Introduce ArgoCD only when multi-service cadence justifies it | CI no longer applies Argo-managed resources directly |
+
+### 9.8.5 Phase Controls
+
+- **G1 controls**: Agent token storage in secret manager, namespace-scoped RBAC, read-only where practical.
+- **G2 controls**: Deployment jobs must emit environment URL, commit SHA, and rollout status.
+- **G3 controls**: CI image build/push remains in GitLab; cluster apply path is pull-based for migrated workloads.
+- **G4 controls**: Explicit cutover checklist required to prevent dual-controller drift.
+
+### 9.8.6 Operational Readiness Checklist
+
+- [ ] GitLab Agent project and token bootstrap documented
+- [ ] Namespace-scoped agent RBAC manifest reviewed
+- [ ] Environment mapping (`dev`/`production`) verified in GitLab
+- [ ] Deployment metadata emitted per rollout
+- [ ] Rollback procedure validated for at least one failed rollout simulation
+- [ ] Controller-authority matrix documented (CI apply vs Agent vs ArgoCD)
+
+### 9.8.7 Success Metrics
+
+- Mean deploy verification time reduced for `hotspot-dev`.
+- Every production deployment linked to commit SHA and pipeline ID.
+- No cluster-wide credentials required in CI jobs.
+- Zero detected resource drift loops caused by dual deployment controllers.
+
 ---
 
 # 10. Local Development
@@ -1183,28 +1366,52 @@ Implementation is divided into controlled, session-sized phases. No phase begins
 - [x] Verify local-path storage and disk capacity
 
 Phase 0 note: current application `Service` and `Deployment` manifests include baseline Prometheus/OpenObserve labels/annotations.
-Phase 0 note: repository remote URL wiring can be finalized when the target GitLab project path is chosen.
+Phase 0 note: repository remote URL is configured and tracking `origin/master` at `gitlab.rmwhs.com/apps/hotspot.git`.
 
 ## Phase 1 — Identity and Security Foundation
 
 - [x] Create PostgreSQL schema for users, sessions, and verification
-- [ ] Implement registration and email verification
-- [ ] Implement JWT/refresh/passkey foundation
-- [ ] Implement account status and RBAC
-- [ ] Implement identity-verification provider adapter
-- [ ] Implement signed verification callback and deduplication
-- [ ] Implement trial entitlement activation exactly once
-- [ ] Add account deactivation/export/delete workflow
-- [ ] Unit test every auth/identity service method
+- [x] Implement registration and email verification service scaffolding
+- [x] Complete registration/email verification composition wiring
+- [x] Complete registration/email verification runtime integration tests
+- [x] Implement auth/user mutation outbox events (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`) at service scaffolding level
+- [x] Complete auth/user mutation outbox runtime integration tests
+- [x] Implement JWT/refresh service scaffolding
+- [x] Complete JWT/refresh composition wiring
+- [x] Complete JWT/refresh runtime integration tests
+- [x] Implement passkey/WebAuthn service scaffolding
+- [x] Complete passkey/WebAuthn composition wiring
+- [x] Complete passkey/WebAuthn runtime integration tests
+- [x] Implement account status and RBAC service scaffolding
+- [x] Complete account status and RBAC composition wiring
+- [x] Complete account status and RBAC runtime integration tests
+- [x] Implement identity-verification provider adapter service scaffolding
+- [x] Complete identity-verification provider adapter composition wiring
+- [x] Complete identity-verification provider adapter runtime integration tests
+- [x] Implement signed verification callback and deduplication service scaffolding
+- [x] Complete signed verification callback runtime integration tests
+- [x] Implement trial entitlement activation exactly once
+- [x] Add account deactivation/export/delete workflow
+- [x] Unit test every auth/identity service method
+- [x] Implement notification subscribers for `user.created` and `user.email-reset-requested` using shared email service contract (scaffolding)
+- [x] Complete notification subscriber runtime integration tests
+- [x] Add outbox publisher + subscriber integration tests (dedup/retry/DLQ)
+- [x] Enforce dispatch-vs-orchestration-vs-service boundaries for auth flows (gateway adapters call service contracts only)
+
+Phase 1 note: registration, email-verification callback transition, JWT refresh rotation, account-status gating with role claims, identity-verification provider session start flow, signed identity-verification callback deduplication, passkey challenge/credential flow scaffolding, trial activation-once and account lifecycle workflow scaffolding, full auth mutation outbox scaffolding (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`), and notification subscriber scaffolding are implemented at service/repository level with dispatch+composition wiring. Phase 1 runtime/integration matrix executed green.
 
 ## Phase 2 — Profiles and Social Graph
 
-- [ ] Implement profile CRUD and handle uniqueness
-- [ ] Implement follow, unfollow, request, approve, block, mute
-- [ ] Implement account privacy and follower list visibility
-- [ ] Implement cursor pagination
-- [ ] Implement relationship service unit/integration tests
-- [ ] Add profile and relationship API route contracts
+- [x] Implement profile CRUD and handle uniqueness
+- [x] Implement follow, unfollow, request, approve, block, mute
+- [x] Implement account privacy and follower list visibility
+- [x] Implement cursor pagination
+- [x] Implement relationship service unit/integration tests
+- [x] Add profile and relationship API route contracts
+- [x] Complete profile/social composition wiring
+- [x] Complete profile/social runtime integration tests
+
+Phase 2 note: service/repository/handler scaffolding for profile and social graph flows is implemented with outbox-backed mutation events (`profile.updated`, `follow.requested`, `follow.accepted`, `follow.removed`, `user.blocked`, `user.muted`), follower-list privacy enforcement, cursor pagination, and runtime PostgreSQL integration coverage for profile updates plus protected-follow lifecycle.
 
 ## Phase 3 — Text Posts and Threads
 
@@ -1328,33 +1535,45 @@ Phase 0 note: repository remote URL wiring can be finalized when the target GitL
 
 No phase is complete until code, migrations, tests, RBAC, resource limits, docs, and deployment evidence exist. Each AI session should implement only the current phase and leave a resume-ready summary in `CHANGELOG.md`.
 
+Cross-phase type gate:
+
+- TypeScript and Python deltas must satisfy explicit typing rules from NFR-22 and section 12 rules.
+- Any phase checklist item that introduces or modifies contracts/domain logic is blocked until type checks pass.
+- If a language stack is present in the phase, strict type check output must be attached to phase verification evidence.
+
 ---
 
 # 12. Project Rules & AI-IDE Guidelines
 
-1. **Service Layer Supremacy** — all business logic lives in service modules; handlers only parse transport input and call service/repository functions.
-2. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules.
-3. **No secrets in code** — environment variables, Infisical, Kubernetes Secrets, and CI variables only.
-4. **TypeScript strict mode** — no `any`, implicit returns, or unsafe casts without a documented boundary.
-5. **Java/Python strict typing** — domain and API contracts use explicit types and schemas.
-6. **Error handling** — transport errors map typed domain errors; no unhandled promise rejections or silent failures.
-7. **Idempotency** — every write with replay risk must enforce a key or immutable event ID.
-8. **Tests** — every service function has unit coverage and every major flow has integration coverage.
-9. **Migrations** — never edit a migration after use; create a new migration.
-10. **Environment parity** — use the same adapters and event contracts locally and in Kubernetes.
-11. **No ML ranking** — do not add predictive feed ranking or behavioral personalization.
-12. **No personal-data sales** — do not implement broker, identity reselling, or unauthorized profile sharing.
-13. **No fake accounts or bots** — creation, identity, and moderation boundaries must remain explicit.
-14. **No plaintext Stripe credentials** — webhook and API secrets come from Secret references.
-15. **One phase per AI session** — do not jump to later implementation phases without explicit approval.
-16. **No unauthorized infrastructure edits** — cluster resources require documented deploy scripts and verification.
-17. **No migration to cloud** — no AWS-specific implementation is required unless a future document explicitly changes scope.
-18. **Resume by changelog** — update `CHANGELOG.md` after each implementation session with completed work, unresolved work, and verification evidence.
+1. **Service Layer Supremacy** — all business logic lives in service modules; handlers only parse transport input and call service contracts.
+2. **Dispatch Layer = Gateways/Adapters** — gateways/controllers/handlers/consumers/schedulers/webhook receivers are transport adapters and are never service-layer components.
+3. **Orchestration resides in service modules** — multi-step workflow sequencing across repositories/events must be implemented in service-layer use-case coordinators, never in handlers/consumers/controllers.
+4. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules.
+5. **No secrets in code** — environment variables, Infisical, Kubernetes Secrets, and CI variables only.
+6. **TypeScript strict mode** — all contracts and data flow must be explicitly typed; do not use `any`, `unknown`, `object`, or `Record<string, unknown>` in application/service/repository/handler code.
+7. **Python strict typing** — all contracts and data flow must be explicitly typed; do not use `dict`, `Dict[...]`, `Any`, or `typing.Any` for domain/service contracts.
+8. **Error handling** — transport errors map typed domain errors; no unhandled promise rejections or silent failures.
+9. **Idempotency** — every write with replay risk must enforce a key or immutable event ID.
+10. **Mutation event emission** — create/update/delete service mutations must emit domain events via outbox-backed event ports.
+11. **Tests** — every service function has unit coverage and every major flow has integration coverage.
+12. **Migrations** — never edit a migration after use; create a new migration.
+13. **Environment parity** — use the same adapters and event contracts locally and in Kubernetes.
+14. **No ML ranking** — do not add predictive feed ranking or behavioral personalization.
+15. **No personal-data sales** — do not implement broker, identity reselling, or unauthorized profile sharing.
+16. **No fake accounts or bots** — creation, identity, and moderation boundaries must remain explicit.
+17. **No plaintext Stripe credentials** — webhook and API secrets come from Secret references.
+18. **One phase per AI session** — do not jump to later implementation phases without explicit approval.
+19. **No unauthorized infrastructure edits** — cluster resources require documented deploy scripts and verification.
+20. **No migration to cloud** — no AWS-specific implementation is required unless a future document explicitly changes scope.
+21. **Resume by changelog** — update `CHANGELOG.md` after each implementation session with completed work, unresolved work, and verification evidence.
+22. **Type bans are release blockers** — code with banned weak placeholder types cannot be considered phase-complete.
 
 AI tools must not:
 
 - generate handlers containing business logic;
+- perform multi-step business workflow orchestration in transport adapters;
 - call PostgreSQL/Redis/MongoDB directly from route or event handlers;
+- publish create/update/delete domain events directly from route handlers without service/outbox orchestration;
 - copy existing cluster passwords or secret values;
 - introduce ML ranking or hidden recommendation behavior;
 - sell or export personal data;
@@ -1456,3 +1675,10 @@ Cost trade-off: at-rest cost is driven by storage, identity/live infrastructure,
 - release: E2E smoke and deploy to the `hotspot-dev` namespace;
 - production deploy: migration/rollout, health checks, Stripe webhook health, public smoke test;
 - release rollback: redeploy prior image tag and do not reverse successful database migrations unless a rollback migration exists.
+
+## 14.6 Static Type Gates
+
+- TypeScript: run strict type checks (`tsc --noEmit`) on every merge request and protected-branch pipeline.
+- Python: run strict static typing (`mypy --strict` or equivalent strict pyright configuration) on every merge request and protected-branch pipeline when Python modules exist.
+- Type-policy gate: CI must fail when banned weak placeholder types (`any`, `unknown`, `object`, `Record<string, unknown>`, `dict`, `Dict[...]`, `Any`, `typing.Any`) are introduced in service/domain/repository/handler code.
+- Phase evidence: phase closure notes must include successful type-check output for all languages touched in that phase.
