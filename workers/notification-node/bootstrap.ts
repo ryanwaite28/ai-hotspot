@@ -10,6 +10,7 @@ import {
   RepositoryEventIdempotencyStore,
 } from './subscribers/event-idempotency.store';
 import { NotificationSubscriberRouter } from './subscribers/notification-subscriber-router';
+import { StoryReplyCreatedNotificationSubscriber } from './subscribers/story-reply-created-notification.subscriber';
 import { UserCreatedEmailWelcomeSubscriber } from './subscribers/user-created-email-welcome.subscriber';
 import { UserEmailResetRequestedSubscriber } from './subscribers/user-email-reset-requested.subscriber';
 import {
@@ -38,6 +39,7 @@ export function buildNotificationWorker(dependencies: NotificationWorkerDependen
   const router = new NotificationSubscriberRouter([
     new UserCreatedEmailWelcomeSubscriber(idempotencyStore, emailService),
     new UserEmailResetRequestedSubscriber(idempotencyStore, emailService),
+    new StoryReplyCreatedNotificationSubscriber(idempotencyStore, emailService),
   ]);
 
   return {

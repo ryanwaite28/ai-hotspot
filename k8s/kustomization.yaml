@@ -4,6 +4,10 @@ resources:
   - namespace/hotspot-namespaces.yaml
   - rbac/hotspot-deployer-rbac.yaml
   - services/hotspot-configmap.yaml
+  - services/hotspot-media-gateway-configmap.yaml
   - services/hotspot-api-svc.yaml
+  - services/hotspot-media-gateway-svc.yaml
   - deployments/hotspot-api.yaml
+  - deployments/hotspot-media-gateway.yaml
   - ingress/hotspot-api-ingress.yaml
+  - ingress/hotspot-media-gateway-ingress.yaml

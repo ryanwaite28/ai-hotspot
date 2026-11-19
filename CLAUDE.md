@@ -29,6 +29,7 @@ npm run stripe:listen
 - PostgreSQL access is limited to typed repository/query modules.
 - MongoDB access is limited to media/chat repository implementations.
 - Redis access is limited to cache/presence repository adapters.
+- Worker applications must not open direct PostgreSQL/MongoDB/Redis connections; workers call service APIs/contracts only.
 - RabbitMQ publishing and consumption is explicit, durable, typed, retryable, and routed through the event contracts.
 - Use `rxjs-rabbitmq` for Node.js workers and consumers.
 - Every paid feature is enforced by server-side entitlements; never trust browser or API-reported subscription state.
@@ -64,7 +65,7 @@ npm run stripe:listen
 ## Environment Notes
 
 - Local: Docker Compose provides PostgreSQL, MongoDB, Redis, RabbitMQ, MinIO, Mailpit, and test services. Stripe uses test mode and the CLI.
-- Dev: k3s namespace `hotspot-dev`.
+- Dev: k3s namespace `hotspot-dev`; public hosts use `rmwhs-dev.space` single-label subdomains only (no deep subdomains).
 - Production: k3s namespace `hotspot`; public web `hotspot.rmwhs.com`; public API `api.hotspot.rmwhs.com`.
 - Existing cluster services: GitLab, Infisical, RabbitMQ, Prometheus, Grafana, OpenObserve, Mailpit, and the `nginx-external` ingress controller.
 - Runtime values come from Kubernetes Secrets or Infisical references. Never copy secret values into files or logs.
@@ -73,7 +74,7 @@ npm run stripe:listen
 ## K3s Deployment Rules
 
 - Ingress class: `nginx-external`
-- Ingress hosts: subdomains of `rmwhs.com`; never bind the apex domain
+- Ingress hosts: production uses subdomains of `rmwhs.com`; dev uses `rmwhs-dev.space`/`*.rmwhs-dev.space` with single-label subdomains only; never bind either apex domain
 - Plain HTTP origin: `ssl-redirect: "false"`; Cloudflare terminates public TLS
 - Storage: `local-path`, ReadWriteOnce only
 - CI: GitLab plus kaniko/buildah
@@ -97,6 +98,7 @@ npm run stripe:listen
 
 - Do not add domain logic to API handlers or RabbitMQ consumers.
 - Do not access PostgreSQL, MongoDB, or Redis outside repository/adaptor modules.
+- Do not open database client connections inside worker runtimes; route worker writes/reads through service APIs.
 - Do not hardcode secrets, Stripe keys, provider keys, JWT keys, connection strings, or cluster credentials.
 - Do not add an ML/AI ranking or recommendation algorithm.
 - Do not sell personal data or create advertising based on inferred sensitive traits.

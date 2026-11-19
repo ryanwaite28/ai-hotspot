@@ -30,6 +30,14 @@ export interface UserEmailResetRequestedPayload {
   email: string;
 }
 
+export interface StoryReplyCreatedPayload {
+  storyId: string;
+  storyOwnerUserId: string;
+  storyOwnerEmail: string;
+  replyAuthorUserId: string;
+  replyBodyText: string;
+}
+
 export type UserCreatedEvent = DomainEventEnvelope<UserCreatedPayload> & {
   eventType: 'user.created';
   aggregateType: 'user';
@@ -38,4 +46,9 @@ export type UserCreatedEvent = DomainEventEnvelope<UserCreatedPayload> & {
 export type UserEmailResetRequestedEvent = DomainEventEnvelope<UserEmailResetRequestedPayload> & {
   eventType: 'user.email-reset-requested';
   aggregateType: 'user';
+};
+
+export type StoryReplyCreatedEvent = DomainEventEnvelope<StoryReplyCreatedPayload> & {
+  eventType: 'story.reply.created';
+  aggregateType: 'story';
 };

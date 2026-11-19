@@ -98,7 +98,7 @@ export async function startNotificationConsumer({
   logger = console,
   exchange = 'hotspot.domain.events',
   queue = 'hotspot.notifications',
-  routingKeys = ['user.created', 'user.email-reset-requested'],
+  routingKeys = ['user.created', 'user.email-reset-requested', 'story.reply.created'],
   clientFactory = createRabbitMqClient,
 }: StartNotificationConsumerInput): Promise<{ close(): Promise<void> }> {
   if (!amqpUrl) {

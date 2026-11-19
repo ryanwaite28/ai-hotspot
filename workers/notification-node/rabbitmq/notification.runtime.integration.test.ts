@@ -41,7 +41,7 @@ test('runtime integration: consumer routes user events and deduplicates with rep
 
   const worker = buildNotificationWorker({
     subscriberIdempotencyRepository: {
-      async markEventConsumed(input: { subscriberName: string; eventId: string }) {
+      async tryStartEventProcessing(input: { subscriberName: string; eventId: string }) {
         const key = `${input.subscriberName}:${input.eventId}`;
         if (seen.has(key)) {
           return false;
@@ -49,6 +49,8 @@ test('runtime integration: consumer routes user events and deduplicates with rep
         seen.add(key);
         return true;
       },
+      async markEventProcessed() {},
+      async markEventFailed() {},
     },
     emailService: {
       async sendTemplate(input: EmailTemplateSendInput) {

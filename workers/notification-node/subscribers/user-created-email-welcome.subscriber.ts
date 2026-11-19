@@ -46,11 +46,13 @@ export class UserCreatedEmailWelcomeSubscriber {
       throw new Error('user.created payload is invalid');
     }
 
-    const accepted = await this.idempotencyStore.markIfUnseen({
+    const idempotencyInput = {
       subscriberName: SUBSCRIBER_NAME,
       eventId: event.eventId,
       eventType: event.eventType,
-    });
+    };
+
+    const accepted = await this.idempotencyStore.tryStartProcessing(idempotencyInput);
 
     if (!accepted) {
       return false;
@@ -61,11 +63,20 @@ export class UserCreatedEmailWelcomeSubscriber {
       handle: payload.handle,
     };
 
-    await this.emailService.sendTemplate({
-      recipient: payload.email,
-      templateId: 'welcome_email',
-      templateParams,
-    });
+    try {
+      await this.emailService.sendTemplate({
+        recipient: payload.email,
+        templateId: 'welcome_email',
+        templateParams,
+      });
+      await this.idempotencyStore.markProcessed(idempotencyInput);
+    } catch (error) {
+      await this.idempotencyStore.markFailed({
+        ...idempotencyInput,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
     return true;
   }

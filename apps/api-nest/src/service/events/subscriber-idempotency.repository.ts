@@ -11,15 +11,38 @@ export interface QueryExecutor {
 export class SubscriberIdempotencyRepository {
   constructor(private readonly db: QueryExecutor) {}
 
-  async markEventConsumed(input: {
+  async tryStartEventProcessing(input: {
     subscriberName: string;
     eventId: string;
     eventType: string;
   }): Promise<boolean> {
     const result = await this.db.query<ConsumedDomainEventInsertRow>(
-      subscriberIdempotencyQueries.insertConsumedDomainEvent,
-      [input.subscriberName, input.eventId, input.eventType],
+      subscriberIdempotencyQueries.tryStartEventProcessing,
+      [input.subscriberName, input.eventId, input.eventType, 300],
     );
     return result.rows.length === 1;
+  }
+
+  async markEventProcessed(input: {
+    subscriberName: string;
+    eventId: string;
+    eventType: string;
+  }): Promise<void> {
+    await this.db.query<ConsumedDomainEventInsertRow>(
+      subscriberIdempotencyQueries.markEventProcessed,
+      [input.subscriberName, input.eventId, input.eventType],
+    );
+  }
+
+  async markEventFailed(input: {
+    subscriberName: string;
+    eventId: string;
+    eventType: string;
+    errorMessage: string;
+  }): Promise<void> {
+    await this.db.query<ConsumedDomainEventInsertRow>(
+      subscriberIdempotencyQueries.markEventFailed,
+      [input.subscriberName, input.eventId, input.eventType, input.errorMessage],
+    );
   }
 }

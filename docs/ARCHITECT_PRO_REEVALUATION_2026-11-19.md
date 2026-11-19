@@ -100,3 +100,23 @@ Implement this pattern.
 2. Implement user mutation events: user.created, user.updated, user.suspended, user.flagged, user.email-reset-requested.
 3. Implement notification/email subscribers that call shared email service contracts (templateId + templateParams + recipient).
 4. Add integration tests for deduplication, retry, DLQ, and replay behavior.
+
+## Addendum — CDN Inquiry Decision (2026-11-19)
+
+### Decision
+
+Adopt Option 1 now: an in-cluster caching gateway in front of S3-compatible object storage, with Cloudflare as the internet edge cache and TLS boundary.
+
+### Why this was selected
+
+- Best fit for single-node homelab constraints and existing architecture boundaries.
+- Preserves object-storage source-of-truth design and worker-produced derivative flow.
+- Avoids premature CPU-intensive transform workloads from Option 2 on a constrained node.
+- Avoids re-platforming object storage solely for static web serving from Option 3.
+
+### Guardrails
+
+- Cache layer is transport-only and contains no business logic.
+- Private/signed media paths remain entitlement/service controlled.
+- Derivative media keys are immutable and cacheable; moderation/takedown paths remain service authoritative.
+- Option 2 is deferred until observability evidence shows clear benefit.

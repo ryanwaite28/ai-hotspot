@@ -1,5 +1,322 @@
 # HotSpot Changelog
 
+## 2026-11-19 — Phase 5 checklist closure (cleanup + edge-case tests)
+
+### Completed
+
+- Marked Phase 5 "Implement MongoDB TTL or cleanup worker" complete via the already-implemented cleanup worker runtime.
+- Added story edge-case test coverage for:
+	- exact expiry boundary semantics (story is inaccessible at `expires_at` second)
+	- hidden/blocked behavior for otherwise public stories
+	- reply-delivery rejection for blocked viewers and expired stories
+	- file: `apps/api-nest/src/service/stories/stories.service.test.ts`
+- Updated `PROJECT.md` to mark the remaining Phase 5 checklist items complete.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+
+## 2026-11-19 — Notification idempotency lifecycle reliability upgrade
+
+### Completed
+
+- Refactored notification subscriber idempotency from single-step consume markers to lifecycle state transitions:
+	- `tryStartProcessing` claim
+	- `markProcessed` on successful side-effect completion
+	- `markFailed` on side-effect failure for retry eligibility
+	- file: `workers/notification-node/subscribers/event-idempotency.store.ts`
+- Updated notification subscribers to finalize idempotency only after successful email delivery and persist failure state on exceptions:
+	- `workers/notification-node/subscribers/user-created-email-welcome.subscriber.ts`
+	- `workers/notification-node/subscribers/user-email-reset-requested.subscriber.ts`
+	- `workers/notification-node/subscribers/story-reply-created-notification.subscriber.ts`
+- Reworked subscriber idempotency SQL/repository contracts for lifecycle semantics with lease-aware reclaims:
+	- `apps/api-nest/src/db/queries/subscriber-idempotency.queries.ts`
+	- `apps/api-nest/src/service/events/subscriber-idempotency.repository.ts`
+- Added schema migration and Prisma model updates for lifecycle fields (`attempt_count`, `first_seen_at`, `last_attempt_at`, `lease_expires_at`, `completed_at`, `last_error`) plus status/lease index:
+	- `prisma/migrations/20261119_phase1_subscriber_idempotency_lifecycle/migration.sql`
+	- `prisma/schema.prisma`
+- Updated tests/mocks to new interface and added retry-after-failure coverage:
+	- `workers/notification-node/subscribers/subscribers.test.ts`
+	- `workers/notification-node/rabbitmq/notification.runtime.integration.test.ts`
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test workers/notification-node/subscribers/subscribers.test.ts`
+
+## 2026-11-19 — Phase 5 delayed cleanup and story reply delivery
+
+### Completed
+
+- Added story reply delivery contracts and service flow:
+	- added `createStoryReply` input/result contracts
+	- added stories service/handler reply flow with visibility checks and trimmed reply body validation
+	- added outbox enqueue path for `story.reply.created`
+	- files:
+		- `packages/contracts/src/story-contracts.ts`
+		- `apps/api-nest/src/handlers/stories/stories.handler.ts`
+		- `apps/api-nest/src/service/stories/stories.service.ts`
+		- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
+		- `apps/api-nest/src/db/queries/stories.queries.ts`
+- Added notification-worker support for story reply events:
+	- `story.reply.created` contract in domain events
+	- new `StoryReplyCreatedNotificationSubscriber`
+	- default notification routing key now includes `story.reply.created`
+	- files:
+		- `packages/contracts/src/domain-events.ts`
+		- `workers/notification-node/subscribers/story-reply-created-notification.subscriber.ts`
+		- `workers/notification-node/bootstrap.ts`
+		- `workers/notification-node/rabbitmq/notification-consumer.ts`
+		- `workers/notification-node/subscribers/subscribers.test.ts`
+- Added delayed cleanup worker runtime with API-only boundary:
+	- stories service API client for periodic `expireStories` calls
+	- cleanup worker bootstrap and executable main with interval loop and graceful shutdown
+	- new npm script and env variables
+	- files:
+		- `workers/cleanup-node/stories-service-api.client.ts`
+		- `workers/cleanup-node/bootstrap.ts`
+		- `workers/cleanup-node/main.ts`
+		- `workers/cleanup-node/stories-service-api.client.test.ts`
+		- `workers/cleanup-node/bootstrap.test.ts`
+		- `package.json`
+		- `.env.example`
+- Updated `PROJECT.md` Phase 5 checklist to mark delayed cleanup + story reply delivery complete.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/cleanup-node/bootstrap.test.ts workers/cleanup-node/stories-service-api.client.test.ts`
+
+## 2026-11-19 — Phase 5 stories visibility and viewer records
+
+### Completed
+
+- Added story visibility and viewer-tracking contracts:
+	- `packages/contracts/src/story-contracts.ts`
+- Extended stories query/repository paths with:
+	- active-story lookup
+	- viewer/author relationship state checks (`follows` + `blocks`)
+	- files:
+		- `apps/api-nest/src/db/queries/stories.queries.ts`
+		- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
+- Implemented story-view and viewer-summary service operations:
+	- visibility enforcement for `public`, `followers`, and owner-only `close_friends`
+	- owner-only viewer summary access
+	- files:
+		- `apps/api-nest/src/service/stories/stories.service.ts`
+		- `apps/api-nest/src/handlers/stories/stories.handler.ts`
+- Added story-view tracking port implementations:
+	- Mongo-backed `story_views` repository
+	- in-memory fallback for local/test contexts
+	- files:
+		- `apps/api-nest/src/db/mongo/story-views.repository.ts`
+		- `apps/api-nest/src/service/stories/stories.composition.ts`
+- Expanded stories service tests to cover visibility gates and owner-only viewer summaries.
+- Updated `PROJECT.md` Phase 5 checklist to mark “Implement story visibility and viewer records” complete.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+- result: 5 passed, 0 failed.
+
+## 2026-11-19 — Phase 5 stories started (creation + expiry)
+
+### Completed
+
+- Added typed story contracts and exports:
+	- `packages/contracts/src/story-contracts.ts`
+	- `packages/contracts/src/index.ts`
+- Added stories data-access/query layer with outbox-backed mutation SQL:
+	- ready-media eligibility check for story publish
+	- story publish insert with `story.created` outbox event
+	- active-story query by author
+	- expiry cleanup delete with `story.expired` outbox event
+	- file: `apps/api-nest/src/db/queries/stories.queries.ts`
+- Added stories service/repository/handler composition for Phase 5 foundations:
+	- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
+	- `apps/api-nest/src/service/stories/stories.service.ts`
+	- `apps/api-nest/src/handlers/stories/stories.handler.ts`
+	- `apps/api-nest/src/service/stories/stories.composition.ts`
+- Added unit tests covering:
+	- strict 24-hour expiry assignment at publish time
+	- publish rejection when media is not ready/eligible
+	- expiry cleanup behavior and expired story IDs
+	- file: `apps/api-nest/src/service/stories/stories.service.test.ts`
+- Updated `PROJECT.md` Phase 5 checklist to mark “Implement story creation and 24-hour expiry” complete.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+- result: 3 passed, 0 failed.
+
+## 2026-11-19 — Dev domain planning context update
+
+### Completed
+
+- Updated project planning context to include the new Cloudflare dev domain:
+	- dev domain: `rmwhs-dev.space`
+	- wildcard support: `*.rmwhs-dev.space`
+	- constraint: no deep subdomain support.
+- Updated `PROJECT.md` dev identity/base URLs and ingress/domain planning notes to require single-label dev hostnames.
+- Updated `CLAUDE.md` ingress/domain guidance so coding sessions apply the same hostname constraint.
+
+## 2026-11-19 — Phase 4 in-cluster media caching gateway rollout
+
+### Completed
+
+- Added Kubernetes manifests for an in-cluster media caching gateway in `hotspot-dev`:
+	- NGINX deployment with non-root runtime, probes, resource limits, and read-only filesystem controls.
+	- Service exposing the gateway internally.
+	- Ingress route on `media.dev.hotspot.rmwhs.com` via `nginx-external`.
+	- ConfigMap-backed NGINX cache configuration (`X-Cache-Status`, proxy cache, and object-storage upstream).
+- Wired all media gateway resources into `k8s/kustomization.yaml`.
+- Marked Phase 4 checklist item complete in `PROJECT.md`.
+
+### Operator note
+
+- `k8s/services/hotspot-media-gateway-configmap.yaml` contains `replace-with-object-storage-origin:9000` and must be set to the active object-storage origin host before apply.
+
+## 2026-11-19 — Worker DB-boundary enforcement refactor
+
+### Completed
+
+- Refactored media worker runtime to remove direct PostgreSQL connections from worker code.
+- Replaced worker-side DB composition usage with an API client boundary:
+	- added `MediaServiceApiClient` for worker-to-service API calls
+	- worker now posts processing status to service API endpoints instead of opening DB clients.
+- Updated worker bootstrap dependency model from service composition/runtime wiring to API-client wiring.
+- Added tests for media service API client request mapping and error behavior.
+- Added explicit worker boundary guidance to docs:
+	- `PROJECT.md` now states worker apps cannot open database connections and must call service APIs/contracts.
+	- `CLAUDE.md` now mirrors the same non-negotiable runtime rule.
+- Added worker env variables for API endpoint integration in `.env.example`.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test workers/media-node/bootstrap.test.ts workers/media-node/media-service-api.client.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts`
+
+## 2026-11-19 — Phase 4 media worker runtime and derivative contract
+
+### Completed
+
+- Added immutable derivative processing contract fields in shared media contracts.
+- Implemented derivative key and cache-control policy generation in media service for READY assets:
+	- immutable key version `v1`
+	- derivative cache header `public, max-age=31536000, immutable`
+	- derivative variants emitted by media kind (`thumbnail` and `transcode` policy entries).
+- Extended metadata persistence contract and adapters to store derivative processing contract data:
+	- in-memory metadata adapter
+	- Mongo metadata repository (`media_derivatives` collection).
+- Added runnable media worker bootstrap/runtime path:
+	- media subscriber router
+	- worker bootstrap composition
+	- worker main entrypoint with Postgres/RabbitMQ env checks and graceful shutdown.
+- Added media worker script and queue env defaults:
+	- `package.json` (`worker:media`)
+	- `.env.example` (`MEDIA_PROCESSING_EXCHANGE`, `MEDIA_PROCESSING_QUEUE`).
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts workers/media-node/bootstrap.test.ts`
+- result: 9 passed, 0 failed.
+
+## 2026-11-19 — Phase 4 media pipeline continuation
+
+### Completed
+
+- Added upload-session completion orchestration in media service/handler:
+	- `completeUploadSession(...)` transitions callback-confirmed assets from `uploading` to `uploaded` and then requests processing (`processing`) with outbox-backed events.
+- Extended Postgres media repository/query support for upload-session completion and asset lookup by upload session.
+- Added concrete Mongo metadata repository adapter and composition wiring:
+	- when `MONGODB_URL` is set, metadata writes use Mongo collections (`media_assets`, `media_comments`)
+	- when unavailable, composition falls back to in-memory metadata adapter for local testability.
+- Added media processing worker scaffolding in Node worker path:
+	- RabbitMQ consumer for `media.processing.requested`
+	- subscriber that maps processing-requested events into media service `ready` transition updates.
+- Added unit tests for:
+	- upload-complete callback flow
+	- media processing consumer ack/nack behavior
+	- media processing subscriber event handling.
+- Added MongoDB package dependency required for the concrete metadata adapter.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts`
+- result: 8 passed, 0 failed.
+
+## 2026-11-19 — CDN strategy approved for k3s homelab
+
+### Completed
+
+- Documented approved media delivery decision in the master spec:
+	- in-cluster caching gateway in front of S3-compatible object storage (Option 1)
+	- Cloudflare remains internet edge cache and TLS boundary
+	- deferred image-optimization CDN layer (Option 2) pending measured need
+	- rejected object-store replacement for static serving only (Option 3) at current phase
+- Added delivery guardrails and rollout hooks under infrastructure strategy:
+	- immutable derivative key/cache-control policy requirement
+	- in-cluster media gateway deployment/service/ingress requirement
+	- cache-hit/origin-read observability requirement
+- Added architect-pro addendum to capture rationale and constraints.
+
+### Files updated
+
+- `PROJECT.md`
+- `docs/ARCHITECT_PRO_REEVALUATION_2026-11-19.md`
+
+## 2026-11-19 — Phase 4 media foundation started
+
+### Completed
+
+- Added Phase 4 media contracts for upload sessions, media assets, processing states, and media comments:
+	- `packages/contracts/src/media-contracts.ts`
+	- updated exports in `packages/contracts/src/index.ts`
+- Implemented API-side media service scaffolding with strict typed service/repository boundaries:
+	- `apps/api-nest/src/db/queries/media.queries.ts`
+	- `apps/api-nest/src/service/media/postgres-media.repository.ts`
+	- `apps/api-nest/src/service/media/media.service.ts`
+	- `apps/api-nest/src/handlers/media/media.handler.ts`
+	- `apps/api-nest/src/service/media/media.composition.ts`
+- Added media lifecycle logic for:
+	- resumable upload session creation
+	- MIME/size validation
+	- media processing status transitions (`uploading -> uploaded -> processing -> ready`)
+	- ready-gated media comments/replies
+	- outbox-backed mutation events (`media.created`, `media.uploaded`, `media.processing.requested`, `media.ready`, `media.comment.created`)
+- Added PostgreSQL schema migration and Prisma model updates for media foundation:
+	- `prisma/migrations/20261119_phase4_media_foundation/migration.sql`
+	- `prisma/schema.prisma`
+- Added RabbitMQ media queue topology constants with retry/DLQ queue definitions:
+	- `packages/rabbitmq/src/media-topology.ts`
+	- `packages/rabbitmq/src/index.ts`
+- Added Mongo index spec scaffold for media assets and media comments:
+	- `mongo/indexes/media_assets.indexes.js`
+- Added Python media worker scaffold entrypoint for processing-event handling:
+	- `services/media-python/worker.py`
+- Added media unit tests and runtime-integration harness/tests:
+	- `apps/api-nest/src/service/media/media.service.test.ts`
+	- `apps/api-nest/src/service/media/media.runtime.integration.harness.ts`
+	- `apps/api-nest/src/service/media/media.runtime.integration.test.ts`
+- Added script for Phase 4 runtime integration runs:
+	- `package.json` (`test:phase4:runtime`)
+
+### Verification evidence
+
+- Unit tests executed and passing:
+	- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
+	- result: 3 passed, 0 failed
+- Runtime integration command executed:
+	- `npm run -s test:phase4:runtime`
+	- result: tests skipped because `POSTGRES_URL` was not provided in this environment
+- Added runtime test guard so Phase 4 runtime tests only execute when both:
+	- `PHASE4_RUNTIME_INTEGRATION=1` (or `PHASE3_RUNTIME_INTEGRATION=1`)
+	- `POSTGRES_URL` is present
+
+### Next resume point
+
+1. Wire concrete Mongo repository adapter for media metadata persistence (replace in-memory metadata adapter in composition).
+2. Add upload-session completion endpoint/flow that transitions from `uploading` to `uploaded` on object-store callback confirmation.
+3. Implement Node or Python media processing consumer for `hotspot.media.processing` queue and connect status updates back into the media service.
+4. Add integration coverage that validates migration-applied Postgres schema plus outbox publication behavior against a running Postgres instance.
+
 ## 2026-11-18 — Initial project specification
 
 ### Completed

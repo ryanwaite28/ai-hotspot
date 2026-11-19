@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotspot-media-gateway
+  namespace: hotspot-dev
+  labels:
+    app: hotspot-media-gateway
+    app.kubernetes.io/name: hotspot-media-gateway
+    app.kubernetes.io/part-of: hotspot
+    observability.openobserve/enabled: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotspot-media-gateway
+  template:
+    metadata:
+      labels:
+        app: hotspot-media-gateway
+        app.kubernetes.io/name: hotspot-media-gateway
+        app.kubernetes.io/part-of: hotspot
+        observability.openobserve/enabled: "true"
+    spec:
+      serviceAccountName: hotspot-deployer
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+        - name: hotspot-media-gateway
+          image: nginx:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: hotspot-media-gateway-config
+        - name: nginx-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

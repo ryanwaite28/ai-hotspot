@@ -119,6 +119,8 @@ STRIPE
 | Domain | Identity-verified social publishing and community media |
 | API URL — local | `http://api.hotspot.local` |
 | Web URL — local | `http://hotspot.local` |
+| API URL — dev | `https://api.rmwhs-dev.space` |
+| Web URL — dev | `https://hotspot.rmwhs-dev.space` |
 | API URL — production | `https://api.hotspot.rmwhs.com` |
 | Web URL — production | `https://hotspot.rmwhs.com` |
 | AWS Account | Not applicable; this project is home-server first |
@@ -317,6 +319,9 @@ HotSpot uses a dispatch/service split:
 > ⚠ **Service Layer Supremacy — Core Architectural Rule**  
 > No route, worker, Lambda-style handler, scheduled job, or GraphQL resolver may contain business rules or direct data access outside the architecture's service/query contracts. A transport layer is replaceable and intentionally thin.
 
+> ⚠ **Worker Data Boundary Rule**  
+> Worker applications are transport adapters and must not open direct PostgreSQL, MongoDB, or Redis connections. Workers consume events, call service APIs/contracts, and map outputs only. Database access is allowed exclusively inside service-layer applications and their repository/query modules.
+
 Dispatch examples for this repository: `apps/api-nest/src/handlers/**`, RabbitMQ consumer adapters, Stripe webhook endpoints, and scheduled-trigger adapters.
 
 Orchestration examples for this repository: auth registration/session lifecycle coordination in `apps/api-nest/src/service/**` use-case services.
@@ -499,6 +504,7 @@ Use:
 - local environment namespace may be `hotspot-dev`
 - production namespace `hotspot`
 - ingress hosts must use subdomains and never the apex domain
+- dev public hosts must use `rmwhs-dev.space` or `*.rmwhs-dev.space` with a single label only (no deep subdomains)
 
 ## 5.3 Standard Tags and Labels
 
@@ -565,7 +571,7 @@ Each workload declares:
 - CPU/memory requests and limits
 - `PodDisruptionBudget` only after replica counts justify it
 
-The application uses `nginx-external` and `ssl-redirect: false`. Cloudflare handles public TLS. The production hostnames are `hotspot.rmwhs.com` and `api.hotspot.rmwhs.com`.
+The application uses `nginx-external` and `ssl-redirect: false`. Cloudflare handles public TLS. The production hostnames are `hotspot.rmwhs.com` and `api.hotspot.rmwhs.com`. Dev hostnames use `rmwhs-dev.space` and must not use deep subdomains.
 
 ## 5.7 Secrets
 
@@ -590,6 +596,59 @@ Runtime secrets are stored in Infisical or namespace Kubernetes Secrets and moun
 One namespace-scoped CI ServiceAccount and Role are required for HotSpot deploys. The deploy role can create/update Deployments, StatefulSets, Services, Ingresses, ConfigMaps, Secrets, and ServiceAccounts only in `hotspot`. It cannot read cluster-admin resources or other namespaces.
 
 Runtime ServiceAccounts are workload-specific and never share credentials.
+
+## 5.9 Media CDN and Edge Caching Strategy
+
+### 5.9.1 Decision
+
+HotSpot uses a dedicated caching gateway in front of its S3-compatible object storage for public media delivery. Cloudflare remains the internet edge cache and TLS boundary.
+
+Decision summary:
+
+- Primary approach: dedicated caching/proxy gateway in-cluster (Option 1 pattern).
+- Deferred approach: image-optimization CDN layer with on-the-fly transforms (Option 2) until measured need exists.
+- Rejected for current state: replacing object storage choice only to gain built-in static web serving (Option 3), because object-storage direction is already established.
+
+### 5.9.2 Rationale
+
+- Satisfies NFR-03 cost efficiency by adding minimal operational overhead and avoiding managed CDN dependencies.
+- Respects NFR-12 capacity limits on the 4 vCPU single-node cluster by avoiding early CPU-heavy transform tiers.
+- Preserves NFR-05 local parity: object storage plus caching gateway behavior can be reproduced in Docker Compose and k3s.
+- Fits media architecture flow: derivatives are produced by media workers and then cached as immutable public assets.
+
+### 5.9.3 Architecture Shape
+
+```text
+Client
+  -> Cloudflare edge cache (public host)
+  -> nginx-external ingress
+  -> hotspot media cache gateway service
+  -> object storage origin (MinIO/SeaweedFS-compatible)
+```
+
+Rules:
+
+- Originals and derivatives remain in object storage as source of truth.
+- Public derivative URLs use immutable object keys and strong cache headers.
+- Private or entitlement-gated media uses short-lived signed URLs and bypass/non-cache policy as required.
+- Media processing and policy status remain service/worker responsibilities; cache layer never performs business decisions.
+
+### 5.9.4 Deferred Upgrade Trigger (Option 2)
+
+Introduce an image-optimization CDN tier only when observed metrics justify it. Minimum trigger evidence:
+
+- sustained origin read pressure that cache headers cannot mitigate,
+- measurable latency/egress issues for media-heavy routes,
+- CPU budget available for transform workloads without violating existing SLOs.
+
+### 5.9.5 Delivery Plan Hook
+
+Phase 4 and hardening work must include:
+
+- media cache-control policy for derivative objects,
+- immutable derivative key/versioning convention,
+- one in-cluster media gateway deployment/service/ingress path with resource limits,
+- cache-hit and origin-read observability metrics.
 
 ---
 
@@ -1033,7 +1092,7 @@ MongoDB indexes are created with each collection migration and enforce TTL polic
 | Environment | API URL | Web URL |
 |---|---|---|
 | Local | `http://api.hotspot.local` | `http://hotspot.local` |
-| Dev | `https://api.dev.hotspot.rmwhs.com` | `https://dev.hotspot.rmwhs.com` |
+| Dev | `https://api.rmwhs-dev.space` | `https://hotspot.rmwhs-dev.space` |
 | Production | `https://api.hotspot.rmwhs.com` | `https://hotspot.rmwhs.com` |
 
 ## 8.2 Response Envelope
@@ -1134,7 +1193,7 @@ JWT endpoints validate issuer, audience, expiry, revocation state, and account s
 | Environment | Purpose | Compute |
 |---|---|---|
 | Local | Docker Compose developer environment | workstation |
-| Dev | Feature validation on k3s | `hotspot-dev` namespace |
+| Dev | Feature validation on k3s with Cloudflare hostnames under `rmwhs-dev.space` (single-label subdomains only) | `hotspot-dev` namespace |
 | Production | Public personal project | `hotspot` namespace |
 
 ## 9.2 CI/CD
@@ -1367,6 +1426,7 @@ Implementation is divided into controlled, session-sized phases. No phase begins
 
 Phase 0 note: current application `Service` and `Deployment` manifests include baseline Prometheus/OpenObserve labels/annotations.
 Phase 0 note: repository remote URL is configured and tracking `origin/master` at `gitlab.rmwhs.com/apps/hotspot.git`.
+Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.space`; deep subdomains are not supported and all ingress host planning must remain single-label under that domain.
 
 ## Phase 1 — Identity and Security Foundation
 
@@ -1427,23 +1487,29 @@ Phase 3 note: posts foundation scaffolding is implemented with typed contracts, 
 
 ## Phase 4 — Media Foundation
 
-- [ ] Add object-storage upload session
-- [ ] Add MongoDB media metadata collection
-- [ ] Implement resumable upload/size/MIME validation
-- [ ] Implement Python media processor worker
-- [ ] Implement RabbitMQ processing queue with DLQ
-- [ ] Implement thumbnail/transcode/status contract
-- [ ] Implement alt text and photo carousels
-- [ ] Implement media comments/replies
-- [ ] Add media integration tests
+- [x] Add object-storage upload session
+- [x] Add MongoDB media metadata collection
+- [x] Implement resumable upload/size/MIME validation
+- [x] Implement Python media processor worker
+- [x] Implement RabbitMQ processing queue with DLQ
+- [x] Implement thumbnail/transcode/status contract
+- [x] Implement alt text and photo carousels
+- [x] Implement media comments/replies
+- [x] Add media integration tests
+- [x] Implement immutable derivative object-key and cache-control policy
+- [x] Deploy in-cluster media caching gateway and ingress route
+
+Phase 4 note: object-storage upload sessions, size/MIME validation, upload-complete callback flow (`uploading -> uploaded -> processing`), Mongo metadata repository wiring (with local fallback), RabbitMQ processing consumer/subscriber scaffolding, runnable media worker bootstrap, thumbnail/transcode status contract with immutable derivative key/cache headers, media comments/replies, photo carousel links, media unit/runtime-integration harness coverage, and an in-cluster media caching gateway + ingress deployment path are implemented. Full transcode execution internals remain pending.
 
 ## Phase 5 — Stories
 
-- [ ] Implement story creation and 24-hour expiry
-- [ ] Implement story visibility and viewer records
-- [ ] Implement delayed cleanup and story reply delivery
-- [ ] Implement MongoDB TTL or cleanup worker
-- [ ] Test exact expiry and hidden/deleted behavior
+- [x] Implement story creation and 24-hour expiry
+- [x] Implement story visibility and viewer records
+- [x] Implement delayed cleanup and story reply delivery
+- [x] Implement MongoDB TTL or cleanup worker
+- [x] Test exact expiry and hidden/deleted behavior
+
+Phase 5 note: story publish scaffolding now requires a ready media asset owned by the actor, writes `story.created` outbox events, assigns a strict 24-hour expiry window, and includes an explicit expiry cleanup path that emits `story.expired` outbox events when expired records are removed. Active-story visibility checks now enforce `public`, `followers`, and owner-only `close_friends` access semantics, and story-viewer records are tracked (Mongo-backed with local in-memory fallback) with owner-only viewer summary access. Story replies now enqueue `story.reply.created` outbox events for notification delivery, a dedicated cleanup worker runtime calls the stories expiry API on a configurable interval, and test coverage now includes exact-expiry and hidden/blocked access behavior.
 
 ## Phase 6 — Stitch and Duet
 
@@ -1550,7 +1616,7 @@ Cross-phase type gate:
 1. **Service Layer Supremacy** — all business logic lives in service modules; handlers only parse transport input and call service contracts.
 2. **Dispatch Layer = Gateways/Adapters** — gateways/controllers/handlers/consumers/schedulers/webhook receivers are transport adapters and are never service-layer components.
 3. **Orchestration resides in service modules** — multi-step workflow sequencing across repositories/events must be implemented in service-layer use-case coordinators, never in handlers/consumers/controllers.
-4. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules.
+4. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules inside service-layer applications only; worker apps must call service APIs/contracts and never connect to databases directly.
 5. **No secrets in code** — environment variables, Infisical, Kubernetes Secrets, and CI variables only.
 6. **TypeScript strict mode** — all contracts and data flow must be explicitly typed; do not use `any`, `unknown`, `object`, or `Record<string, unknown>` in application/service/repository/handler code.
 7. **Python strict typing** — all contracts and data flow must be explicitly typed; do not use `dict`, `Dict[...]`, `Any`, or `typing.Any` for domain/service contracts.
@@ -1575,6 +1641,7 @@ AI tools must not:
 - generate handlers containing business logic;
 - perform multi-step business workflow orchestration in transport adapters;
 - call PostgreSQL/Redis/MongoDB directly from route or event handlers;
+- open PostgreSQL/Redis/MongoDB client connections inside worker applications;
 - publish create/update/delete domain events directly from route handlers without service/outbox orchestration;
 - copy existing cluster passwords or secret values;
 - introduce ML ranking or hidden recommendation behavior;
