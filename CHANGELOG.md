@@ -113,3 +113,27 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 1. Implement registration and email-verification flow in `apps/api-nest`.
 2. Add JWT access/refresh token issue/rotation and session revocation path.
 3. Add auth unit tests for service-layer behavior.
+
+## 2026-11-19 — Phase 1 auth scaffolding continued
+
+### Completed
+
+- Added shared auth utilities in `packages/auth/src`:
+	- password hashing and verification helpers (`scrypt`)
+	- signed email-verification token create/verify helpers
+- Added initial API service-layer auth scaffolding:
+	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+- Added first unit test for registration normalization and verification-token creation:
+	- `apps/api-nest/src/service/auth/auth.service.test.ts`
+
+### Notes
+
+- This is scaffolding for Phase 1 and intentionally repository-port based.
+- JWT issue/refresh flow, persistence wiring, and verification callback handling remain pending.
+
+### Next resume point
+
+1. Implement persistent `AuthRepository` against PostgreSQL tables from `prisma/migrations/20261119_phase1_identity_init/migration.sql`.
+2. Add JWT issue/refresh/revoke service methods and tests.
+3. Add email verification callback flow and state transition from `pending_verification` to `active`.
