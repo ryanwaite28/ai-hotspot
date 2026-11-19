@@ -1415,13 +1415,15 @@ Phase 2 note: service/repository/handler scaffolding for profile and social grap
 
 ## Phase 3 — Text Posts and Threads
 
-- [ ] Implement post creation/draft/schedule/edit/delete/pin
-- [ ] Implement reply and thread-root relationships
-- [ ] Implement repost and quote operations
-- [ ] Implement like, bookmark, and share counters
-- [ ] Implement chronological following/public/topic feed
-- [ ] Implement post privacy and block checks
-- [ ] Add full text-post test suite
+- [x] Implement post creation/draft/schedule/edit/delete/pin
+- [x] Implement reply and thread-root relationships
+- [x] Implement repost and quote operations
+- [x] Implement like, bookmark, and share counters
+- [x] Implement chronological following/public/topic feed
+- [x] Implement post privacy and block checks
+- [x] Add full text-post test suite
+
+Phase 3 note: posts foundation scaffolding is implemented with typed contracts, PostgreSQL `posts` schema + interaction migrations/model, repository/service/handler composition, outbox-backed mutation events (`post.created`, `post.replied`, `post.reposted`, `post.quoted`, `post.updated`, `post.deleted`, `post.pinned`, `post.liked`, `post.unliked`, `post.bookmarked`, `post.unbookmarked`), reply/thread-root persistence (`parent_post_id`, `thread_root_post_id`), repost/quote persistence (`repost_of_post_id`, `quote_of_post_id`), interaction counters (`like_count`, `bookmark_count`, `share_count`), cursor-based chronological following/public/topic feed retrieval, service-layer post visibility and block checks for source interactions, and expanded text-post test coverage (service/handler plus runtime integration harness/tests).
 
 ## Phase 4 — Media Foundation
 

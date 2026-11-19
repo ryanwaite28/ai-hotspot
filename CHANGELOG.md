@@ -800,3 +800,186 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Full TypeScript compile passed after additions.
 - Targeted regression run passed for auth/events/social + worker tests:
 	- 15 passed, 0 failed, 2 skipped (runtime-gated social tests skipped because runtime flag was not enabled in this run).
+
+## 2026-11-19 — Phase 3 started: text posts foundation (create/draft/schedule/edit/delete/pin)
+
+### Completed
+
+- Added shared post contracts:
+	- `packages/contracts/src/post-contracts.ts`
+	- export wired in `packages/contracts/src/index.ts`
+- Added Phase 3 persistence foundation:
+	- migration: `prisma/migrations/20261119_phase3_posts_foundation/migration.sql`
+	- Prisma model: `Post` in `prisma/schema.prisma`
+- Added typed query/repository/service/handler scaffolding for post workflows:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
+	- `apps/api-nest/src/service/posts/posts.composition.ts`
+- Added tests for post service and handler:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+- Implemented outbox-backed mutation events for post workflows:
+	- `post.created`, `post.updated`, `post.deleted`, `post.pinned`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 18 passed, 0 failed (auth/events/social/posts/worker tests).
+
+## 2026-11-19 — Phase 3 continued: reply and thread-root relationships
+
+### Completed
+
+- Extended post contracts with reply/thread relationship fields and reply input:
+	- `packages/contracts/src/post-contracts.ts`
+- Added post thread relationship migration:
+	- `prisma/migrations/20261119_phase3_post_thread_relationships/migration.sql`
+- Extended Prisma post model with self-referential relationships:
+	- `prisma/schema.prisma`
+- Updated posts query/repository/service/handler to support replies and thread-root persistence:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
+- Added/updated post events and payloads for reply path:
+	- `post.replied` event emitted for reply creation.
+- Expanded tests:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 18 passed, 0 failed.
+
+## 2026-11-19 — Phase 3 continued: repost and quote operations
+
+### Completed
+
+- Extended post contracts for repost/quote fields and inputs:
+	- `packages/contracts/src/post-contracts.ts`
+- Added repost/quote schema migration:
+	- `prisma/migrations/20261119_phase3_post_repost_quote_relationships/migration.sql`
+- Extended Prisma `Post` model with repost/quote self-relationships and index:
+	- `prisma/schema.prisma`
+- Extended post query/repository/service/handler paths to support repost and quote workflows:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
+- Added post event coverage for repost/quote creates:
+	- `post.reposted`, `post.quoted`
+- Expanded tests for repost/quote service and handler delegation:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+- Corrected post insert SQL parameter ordering for scheduled/published timestamp branch conditions while extending the query module.
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 18 passed, 0 failed.
+
+## 2026-11-19 — Phase 3 continued: like/bookmark/share counters
+
+### Completed
+
+- Extended post contracts with interaction counters and interaction action/result types:
+	- `packages/contracts/src/post-contracts.ts`
+- Added migration for post counters and interaction join tables:
+	- `prisma/migrations/20261119_phase3_post_interaction_counters/migration.sql`
+- Extended Prisma models:
+	- `Post` with `likeCount`, `bookmarkCount`, `shareCount`
+	- Added `PostLike` and `PostBookmark` models with user/post relations and indexes
+	- Updated `User` with `postLikes` and `postBookmarks` relations
+	- `prisma/schema.prisma`
+- Extended posts query/repository/service/handler layers to support like/unlike/bookmark/unbookmark flows with outbox events:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
+- Added and extended tests for interaction workflows and handler delegation:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 18 passed, 0 failed.
+
+## 2026-11-19 — Phase 3 continued: chronological following/public/topic feed
+
+### Completed
+
+- Extended post contracts for feed query/pagination types:
+	- `packages/contracts/src/post-contracts.ts`
+- Added feed query SQL for chronological timelines with cursor pagination:
+	- following feed,
+	- public feed,
+	- topic feed,
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+- Extended posts repository/service/handler layers with feed methods:
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
+- Added feed behavior and delegation test coverage:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 19 passed, 0 failed.
+
+## 2026-11-19 — Phase 3 continued: post privacy and block checks
+
+### Completed
+
+- Added relationship-state query support for post access checks:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
+- Added service-layer post visibility and block checks for:
+	- replies,
+	- reposts,
+	- quotes,
+	- like/unlike/bookmark/unbookmark interactions,
+	- `apps/api-nest/src/service/posts/posts.service.ts`
+- Added following-feed block filtering in SQL:
+	- `apps/api-nest/src/db/queries/posts.queries.ts`
+- Extended posts service tests with focused privacy/block assertions:
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 20 passed, 0 failed.
+
+## 2026-11-19 — Phase 3 completed: full text-post test suite
+
+### Completed
+
+- Added runtime posts integration harness and tests:
+	- `apps/api-nest/src/service/posts/posts.runtime.integration.harness.ts`
+	- `apps/api-nest/src/service/posts/posts.runtime.integration.test.ts`
+- Added Phase 3 runtime test script:
+	- `package.json` (`test:phase3:runtime`)
+- Expanded post service and handler unit tests to cover:
+	- repost/quote,
+	- like/unlike/bookmark/unbookmark,
+	- chronological following/public/topic feed pagination,
+	- privacy/block interaction guardrails,
+	- `apps/api-nest/src/service/posts/posts.service.test.js`
+	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
+
+### Verification
+
+- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
+- Targeted regression suite passed:
+	- 20 passed, 0 failed, 2 skipped (runtime integration tests skipped without `PHASE3_RUNTIME_INTEGRATION=1`).

@@ -39,11 +39,76 @@ model User {
   incomingBlocks            Block[]            @relation("BlockBlocked")
   outgoingMutes             Mute[]             @relation("MuteMuter")
   incomingMutes             Mute[]             @relation("MuteMuted")
+  posts                     Post[]
+  postLikes                 PostLike[]
+  postBookmarks             PostBookmark[]
 
   @@unique([handle], map: "users_handle_unique")
   @@unique([email], map: "users_email_unique")
   @@index([status], map: "users_status_idx")
   @@map("users")
+}
+
+model Post {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorUserId String  @map("author_user_id") @db.Uuid
+  parentPostId String? @map("parent_post_id") @db.Uuid
+  threadRootPostId String? @map("thread_root_post_id") @db.Uuid
+  repostOfPostId String? @map("repost_of_post_id") @db.Uuid
+  quoteOfPostId String? @map("quote_of_post_id") @db.Uuid
+  contentText  String  @map("content_text")
+  likeCount    Int     @default(0) @map("like_count")
+  bookmarkCount Int    @default(0) @map("bookmark_count")
+  shareCount   Int     @default(0) @map("share_count")
+  status       String
+  visibility   String
+  pinnedAt     DateTime? @map("pinned_at") @db.Timestamptz(6)
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz(6)
+  publishedAt  DateTime? @map("published_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  author       User     @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  parentPost   Post?    @relation("PostParent", fields: [parentPostId], references: [id], onDelete: SetNull)
+  replies      Post[]   @relation("PostParent")
+  threadRoot   Post?    @relation("PostThreadRoot", fields: [threadRootPostId], references: [id], onDelete: SetNull)
+  threadPosts  Post[]   @relation("PostThreadRoot")
+  repostOf     Post?    @relation("PostRepost", fields: [repostOfPostId], references: [id], onDelete: SetNull)
+  reposts      Post[]   @relation("PostRepost")
+  quoteOf      Post?    @relation("PostQuote", fields: [quoteOfPostId], references: [id], onDelete: SetNull)
+  quotes       Post[]   @relation("PostQuote")
+  likes        PostLike[]
+  bookmarks    PostBookmark[]
+
+  @@index([authorUserId, createdAt], map: "posts_author_created_idx")
+  @@index([status, publishedAt], map: "posts_status_published_idx")
+  @@index([threadRootPostId, createdAt], map: "posts_thread_root_created_idx")
+  @@index([repostOfPostId, quoteOfPostId, createdAt], map: "posts_repost_quote_idx")
+  @@map("posts")
+}
+
+model PostLike {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt], map: "post_likes_user_created_idx")
+  @@map("post_likes")
+}
+
+model PostBookmark {
+  postId    String   @map("post_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt], map: "post_bookmarks_user_created_idx")
+  @@map("post_bookmarks")
 }
 
 model ProfileSettings {

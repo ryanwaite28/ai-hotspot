@@ -9,6 +9,7 @@
     "test:integration": "echo 'TODO: wire integration tests'",
     "test:phase1:runtime": "PHASE1_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/auth/auth.runtime.integration.test.js workers/notification-node/rabbitmq/notification.runtime.integration.test.ts",
     "test:phase2:runtime": "PHASE2_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/social/social.runtime.integration.test.ts",
+    "test:phase3:runtime": "PHASE3_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/posts/posts.runtime.integration.test.ts",
     "test:e2e": "echo 'TODO: wire e2e tests'",
     "db:migrate": "echo 'TODO: add migration tooling (Prisma/Flyway)'",
     "db:seed": "bash scripts/seed-local.sh",
