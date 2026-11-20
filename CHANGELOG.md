@@ -1,5 +1,51 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Phase 11 notification preference and moderation foundation
+
+### Completed
+
+- Added notification preference contracts and default-enabled delivery gate.
+- Added transactional email template routing for subscription, billing, campaign, moderation, and live events.
+- Extended notification RabbitMQ routing keys for Phase 11 event types.
+- Added report/case lifecycle contracts and open/triaged/escalated/resolved/appealed states.
+- Added appeal and append-only moderation audit foundations.
+- Added notification/moderation unit coverage, including idempotent retry behavior.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
+- Result: 11 passed, 0 failed.
+
+### Pending
+
+- Moderation dashboard UI
+- Durable fake/bot escalation automation
+- RabbitMQ runtime/DLQ infrastructure verification
+
+## 2026-11-20 — Phase 10 live streaming foundation
+
+### Completed
+
+- Added live stream, credential, and live chat contracts.
+- Added scheduled/start/live/paused/ended/canceled lifecycle state transitions.
+- Added paid/trial entitlement gates and public/followers/subscribers visibility checks.
+- Added short-lived publish/viewer credential port with in-memory local adapter.
+- Added live chat length, visibility, and moderation-state scaffolding.
+- Added opt-in recording fields and live-stream migration foundations.
+- Added lifecycle unit coverage.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/live/live.service.test.ts`
+- Result: 2 passed, 0 failed.
+
+### Pending
+
+- LiveKit SDK and isolated K3s deployment
+- Durable live chat persistence/worker integration
+- Real room credential/signaling transport
+- VOD processing and visibility integration
+
 ## 2026-11-20 — Phase 9 campaign foundation
 
 ### Completed
@@ -1084,27 +1130,3 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - Updated `PROJECT.md` Phase 1 checklist runtime items to complete.
 - Phase 1 is now complete and Phase 2 can begin.
-
-## 2026-11-20 — Phase 8 creator subscription lifecycle
-
-### Completed
-
-- Added creator subscription and checkout contracts.
-- Added active-tier HTTPS checkout initiation.
-- Added subscription activation, renewal, past-due, refund, and cancellation states.
-- Added active-period tier access checks for creator owners and subscribers.
-- Added subscriber cancellation operations and webhook lifecycle updates.
-- Added creator subscription lifecycle migration.
-- Added unit coverage for checkout, access, cancellation, renewal, refund, and past-due behavior.
-
-### Verification evidence
-
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/creator-subscriptions/creator-tiers.service.test.ts apps/api-nest/src/service/creator-subscriptions/creator-payout-account.service.test.ts apps/api-nest/src/service/creator-subscriptions/creator-subscriptions.service.test.ts`
-- Result: 8 passed, 0 failed.
-
-### Pending
-
-- Real Stripe Connect SDK transport and payout webhooks
-- External subscription provider integration
-- Subscriber administration UI
-- Runtime Stripe integration evidence

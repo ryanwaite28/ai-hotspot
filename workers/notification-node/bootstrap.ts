@@ -13,6 +13,7 @@ import { NotificationSubscriberRouter } from './subscribers/notification-subscri
 import { StoryReplyCreatedNotificationSubscriber } from './subscribers/story-reply-created-notification.subscriber';
 import { UserCreatedEmailWelcomeSubscriber } from './subscribers/user-created-email-welcome.subscriber';
 import { UserEmailResetRequestedSubscriber } from './subscribers/user-email-reset-requested.subscriber';
+import { TransactionalTemplateSubscriber } from './subscribers/transactional-template.subscriber';
 import {
   type StartNotificationConsumerInput,
   startNotificationConsumer,
@@ -40,6 +41,7 @@ export function buildNotificationWorker(dependencies: NotificationWorkerDependen
     new UserCreatedEmailWelcomeSubscriber(idempotencyStore, emailService),
     new UserEmailResetRequestedSubscriber(idempotencyStore, emailService),
     new StoryReplyCreatedNotificationSubscriber(idempotencyStore, emailService),
+    new TransactionalTemplateSubscriber(idempotencyStore, emailService),
   ]);
 
   return {

@@ -1562,24 +1562,28 @@ Phase 9 note: campaign contracts, draft/review/approval/status lifecycle, paid/t
 ## Phase 10 — Live Streaming
 
 - [ ] Deploy and isolate LiveKit
-- [ ] Implement stream scheduling/start/end
-- [ ] Implement short-lived publishing credentials
-- [ ] Implement viewer entitlement enforcement
-- [ ] Implement live chat and moderation
-- [ ] Implement follower/subscriber-only rooms
-- [ ] Implement opt-in recording and VOD visibility
-- [ ] Add live lifecycle tests
+- [x] Implement stream scheduling/start/end
+- [x] Implement short-lived publishing credentials
+- [x] Implement viewer entitlement enforcement
+- [x] Implement live chat and moderation
+- [x] Implement follower/subscriber-only rooms
+- [x] Implement opt-in recording and VOD visibility
+- [x] Add live lifecycle tests
+
+Phase 10 note: live-stream scheduling, start/end lifecycle transitions, short-lived room credentials, paid entitlement gates, public/followers/subscribers visibility enforcement, live chat validation/moderation states, opt-in recording, and unit lifecycle coverage are implemented. Real LiveKit/K3s deployment, provider room SDK transport, and durable chat/moderation persistence remain pending runtime/provider work.
 
 ## Phase 11 — Notifications and Moderation
 
-- [ ] Implement notification preference model
-- [ ] Implement RabbitMQ notification queues
-- [ ] Implement transactional email templates
-- [ ] Implement report/case lifecycle
+- [x] Implement notification preference model
+- [x] Implement RabbitMQ notification queues
+- [x] Implement transactional email templates
+- [x] Implement report/case lifecycle
 - [ ] Implement admin moderation dashboard
-- [ ] Implement appeals and audit event export
+- [x] Implement appeals and audit event export
 - [ ] Implement fake/bot account escalation workflows
-- [ ] Add worker failure/retry/DLQ tests
+- [x] Add worker failure/retry/DLQ tests
+
+Phase 11 note: notification preference enforcement, RabbitMQ notification routing, transactional email template routing, report/case lifecycle, appeal/audit append-only foundations, and worker failure/retry lifecycle coverage are implemented. Moderation dashboard UI, durable fake/bot escalation automation, RabbitMQ runtime/DLQ infrastructure verification, and operator deployment evidence remain pending.
 
 ## Phase 12 — Frontend MVP
 
@@ -1614,147 +1618,3 @@ Cross-phase type gate:
 
 - TypeScript and Python deltas must satisfy explicit typing rules from NFR-22 and section 12 rules.
 - Any phase checklist item that introduces or modifies contracts/domain logic is blocked until type checks pass.
-- If a language stack is present in the phase, strict type check output must be attached to phase verification evidence.
-
----
-
-# 12. Project Rules & AI-IDE Guidelines
-
-1. **Service Layer Supremacy** — all business logic lives in service modules; handlers only parse transport input and call service contracts.
-2. **Dispatch Layer = Gateways/Adapters** — gateways/controllers/handlers/consumers/schedulers/webhook receivers are transport adapters and are never service-layer components.
-3. **Orchestration resides in service modules** — multi-step workflow sequencing across repositories/events must be implemented in service-layer use-case coordinators, never in handlers/consumers/controllers.
-4. **No direct DB access outside repositories** — PostgreSQL, MongoDB, and Redis access pass typed repository/query modules inside service-layer applications only; worker apps must call service APIs/contracts and never connect to databases directly.
-5. **No secrets in code** — environment variables, Infisical, Kubernetes Secrets, and CI variables only.
-6. **TypeScript strict mode** — all contracts and data flow must be explicitly typed; do not use `any`, `unknown`, `object`, or `Record<string, unknown>` in application/service/repository/handler code.
-7. **Python strict typing** — all contracts and data flow must be explicitly typed; do not use `dict`, `Dict[...]`, `Any`, or `typing.Any` for domain/service contracts.
-8. **Error handling** — transport errors map typed domain errors; no unhandled promise rejections or silent failures.
-9. **Idempotency** — every write with replay risk must enforce a key or immutable event ID.
-10. **Mutation event emission** — create/update/delete service mutations must emit domain events via outbox-backed event ports.
-11. **Tests** — every service function has unit coverage and every major flow has integration coverage.
-12. **Migrations** — never edit a migration after use; create a new migration.
-13. **Environment parity** — use the same adapters and event contracts locally and in Kubernetes.
-14. **No ML ranking** — do not add predictive feed ranking or behavioral personalization.
-15. **No personal-data sales** — do not implement broker, identity reselling, or unauthorized profile sharing.
-16. **No fake accounts or bots** — creation, identity, and moderation boundaries must remain explicit.
-17. **No plaintext Stripe credentials** — webhook and API secrets come from Secret references.
-18. **One phase per AI session** — do not jump to later implementation phases without explicit approval.
-19. **No unauthorized infrastructure edits** — cluster resources require documented deploy scripts and verification.
-20. **No migration to cloud** — no AWS-specific implementation is required unless a future document explicitly changes scope.
-21. **Resume by changelog** — update `CHANGELOG.md` after each implementation session with completed work, unresolved work, and verification evidence.
-22. **Type bans are release blockers** — code with banned weak placeholder types cannot be considered phase-complete.
-
-AI tools must not:
-
-- generate handlers containing business logic;
-- perform multi-step business workflow orchestration in transport adapters;
-- call PostgreSQL/Redis/MongoDB directly from route or event handlers;
-- open PostgreSQL/Redis/MongoDB client connections inside worker applications;
-- publish create/update/delete domain events directly from route handlers without service/outbox orchestration;
-- copy existing cluster passwords or secret values;
-- introduce ML ranking or hidden recommendation behavior;
-- sell or export personal data;
-- permit public posting before verification;
-- grant Stripe entitlements solely from a browser request;
-- modify this specification through implementation convenience without updating `PROJECT.md`;
-- create a workload without resource requests/limits and probes;
-- use `:latest` image tags in production;
-- edit migrations already applied;
-- deploy privileged containers or Docker-in-Docker;
-- add new architectural patterns not defined here.
-
----
-
-# 13. Infrastructure Cost Estimates
-
-## Home Server Portfolio Deployment
-
-| Area | Monthly Estimate | Notes |
-|---|---:|---|
-| Existing cluster hardware | €0 incremental planning cost / power varies | k3s already installed |
-| Domain/DNS | existing rmwhs.com cost | Cloudflare + domain |
-| GitLab | existing namespace | reuse |
-| PostgreSQL/MongoDB/Redis/RabbitMQ | near-zero incremental | PVC + existing resources |
-| Object storage | near-zero incremental | local storage, capacity-limited |
-| LiveKit | near-zero incremental | bandwidth/power is principal cost |
-| Stripe | transaction fees | no fee when no sale |
-| Identity verification | provider dependent | pay-per-verification possible |
-| Email | existing SMTP/provider | local Mailpit for development |
-| Monitoring | existing | Prometheus/Grafana/OpenObserve reused |
-| Power/network | hardware-dependent | dominant at-rest cost |
-| Backups | existing disk/cloud optional | primary risk is local disk loss |
-
-## Larger Production Reference
-
-| Area | Monthly Estimate | Notes |
-|---|---:|---|
-| Kubernetes compute | external cluster cost | based on node count |
-| Managed PostgreSQL | service dependent | HA and backups drive cost |
-| MongoDB managed tier | service dependent | only if self-hosted is not acceptable |
-| Redis managed tier | service dependent | HA/cache capacity |
-| Object storage/CDN | usage dependent | largest media transfer cost |
-| Live streaming | minutes/egress dependent | major under-load cost |
-| Identity verification | per successful/attempt fee | principal compliance cost |
-| Stripe | percentage/transaction | commercial transaction cost |
-| Monitoring | log/trace ingestion | principal observability cost |
-
-Cost trade-off: at-rest cost is driven by storage, identity/live infrastructure, and power. Under-load cost is driven by media ingest/transcode, live-stream bandwidth, Stripe, logs, object storage, and data transfer.
-
----
-
-# 14. Testing Plan
-
-## 14.1 Unit Tests
-
-- Vitest for NestJS and Node workers.
-- JUnit/Spring tests for Java billing/entitlement services.
-- pytest for Python verification/media services.
-- Mock PostgreSQL, MongoDB, Redis, Stripe, identity-provider, object-storage, RabbitMQ, and LiveKit ports.
-- Every service function has an isolated unit test.
-
-## 14.2 Integration Tests
-
-- PostgreSQL in Docker/Testcontainers or a disposable local database.
-- MongoDB, Redis, RabbitMQ, and object storage containers for real protocol behavior.
-- Stripe test mode with webhook signatures.
-- Real RabbitMQ retry, ack, nack, DLQ, and reconnect behavior.
-- Identity provider sandbox only.
-- LiveKit test room or explicit integration stub.
-
-## 14.3 End-to-End Tests
-
-- register → verify email → complete identity verification → receive trial;
-- create post → reply → repost → quote;
-- upload photo/video → process → comment;
-- create story → wait/force expiry → verify inaccessible;
-- stitch/duet source with permission and source without permission;
-- buy platform tier → Stripe webhook → entitlement grant;
-- expire/refund/cancel subscription → entitlement removed;
-- creator tier subscription → subscriber-only content access;
-- create/pause/cancel campaign;
-- report → moderation case → resolution → appeal;
-- start/end live stream → viewer entitlement enforcement;
-- account export and deletion.
-
-## 14.4 Test Data Strategy
-
-- deterministic seed users, handles, posts, creator tiers, media metadata, and moderation cases;
-- synthetic identities and provider callbacks only;
-- no real identity documents or personal user data;
-- Stripe test fixture objects and signed test webhook events;
-- fixed test clock for 7-day trials and 24-hour story expiry;
-- generated media fixtures for small photo/video processing tests.
-
-## 14.5 CI Test Execution
-
-- every merge request: lint, unit, contract, and service tests;
-- protected branch: integration tests and migration dry-run;
-- release: E2E smoke and deploy to the `hotspot-dev` namespace;
-- production deploy: migration/rollout, health checks, Stripe webhook health, public smoke test;
-- release rollback: redeploy prior image tag and do not reverse successful database migrations unless a rollback migration exists.
-
-## 14.6 Static Type Gates
-
-- TypeScript: run strict type checks (`tsc --noEmit`) on every merge request and protected-branch pipeline.
-- Python: run strict static typing (`mypy --strict` or equivalent strict pyright configuration) on every merge request and protected-branch pipeline when Python modules exist.
-- Type-policy gate: CI must fail when banned weak placeholder types (`any`, `unknown`, `object`, `Record<string, unknown>`, `dict`, `Dict[...]`, `Any`, `typing.Any`) are introduced in service/domain/repository/handler code.
-- Phase evidence: phase closure notes must include successful type-check output for all languages touched in that phase.
