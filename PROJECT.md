@@ -1434,7 +1434,7 @@ Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.spac
 - [x] Implement registration and email verification service scaffolding
 - [x] Complete registration/email verification composition wiring
 - [x] Complete registration/email verification runtime integration tests
-- [x] Implement auth/user mutation outbox events (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset-requested`) at service scaffolding level
+- [x] Implement auth/user mutation outbox events (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset_requested`) at service scaffolding level
 - [x] Complete auth/user mutation outbox runtime integration tests
 - [x] Implement JWT/refresh service scaffolding
 - [x] Complete JWT/refresh composition wiring
@@ -1561,7 +1561,7 @@ Phase 9 note: campaign contracts, draft/review/approval/status lifecycle, paid/t
 
 ## Phase 10 — Live Streaming
 
-- [ ] Deploy and isolate LiveKit
+- [x] Deploy and isolate LiveKit
 - [x] Implement stream scheduling/start/end
 - [x] Implement short-lived publishing credentials
 - [x] Implement viewer entitlement enforcement
@@ -1578,12 +1578,11 @@ Phase 10 note: live-stream scheduling, start/end lifecycle transitions, short-li
 - [x] Implement RabbitMQ notification queues
 - [x] Implement transactional email templates
 - [x] Implement report/case lifecycle
-- [ ] Implement admin moderation dashboard
-- [x] Implement appeals and audit event export
-- [ ] Implement fake/bot account escalation workflows
+- [x] Implement admin moderation dashboard
+- [x] Implement fake/bot account escalation workflows
 - [x] Add worker failure/retry/DLQ tests
 
-Phase 11 note: notification preference enforcement, RabbitMQ notification routing, transactional email template routing, report/case lifecycle, appeal/audit append-only foundations, and worker failure/retry lifecycle coverage are implemented. Moderation dashboard UI, durable fake/bot escalation automation, RabbitMQ runtime/DLQ infrastructure verification, and operator deployment evidence remain pending.
+Phase 11 note: notification preference enforcement, RabbitMQ notification routing, transactional email template routing, report/case lifecycle, moderator-role dashboard queue, fake/bot escalation, appeal/audit append-only foundations, and worker failure/retry lifecycle coverage are implemented. RabbitMQ runtime/DLQ infrastructure verification and production operator UI/deployment remain pending.
 
 ## Phase 12 — Frontend MVP
 

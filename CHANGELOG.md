@@ -1130,3 +1130,23 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - Updated `PROJECT.md` Phase 1 checklist runtime items to complete.
 - Phase 1 is now complete and Phase 2 can begin.
+
+## 2026-11-20 — Phase 11 dashboard and bot escalation completed
+
+### Completed
+
+- Added moderator-role-gated moderation queue dashboard API.
+- Added queue filtering by moderation status and bounded result limits.
+- Added fake/bot escalation workflow with append-only moderation case/audit records.
+- Added handler and service coverage for operator authorization and escalation state.
+- Closed remaining Phase 11 source checklist items for dashboard and bot escalation.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
+- Result: 13 passed, 0 failed.
+
+### Pending
+
+- RabbitMQ runtime/DLQ infrastructure verification
+- Production moderation dashboard UI and deployment evidence

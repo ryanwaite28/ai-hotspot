@@ -6,6 +6,9 @@ import type {
   NotificationCategory,
   NotificationChannel,
   NotificationPreferenceView,
+  ModerationQueueInput,
+  EscalateFakeBotInput,
+  FakeBotEscalationView,
   ReportInput,
   ResolveModerationCaseInput,
 } from '../../../../../packages/contracts/src';
@@ -15,8 +18,15 @@ function nowEpochSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+export interface ModeratorRolePort {
+  isModerator(actorUserId: string): Promise<boolean>;
+}
+
 export class NotificationModerationService {
-  constructor(private readonly repository: ModerationRepository) {}
+  constructor(
+    private readonly repository: ModerationRepository,
+    private readonly moderatorRolePort: ModeratorRolePort,
+  ) {}
 
   async getPreference(
     userId: string,
@@ -85,6 +95,42 @@ export class NotificationModerationService {
     return this.repository.appealCase({
       ...input,
       appealReason,
+      eventId: crypto.randomUUID(),
+      occurredAtEpochSeconds: nowEpochSeconds(),
+    });
+  }
+
+  async listQueue(input: ModerationQueueInput): Promise<ModerationCaseView[]> {
+    if (!(await this.moderatorRolePort.isModerator(input.actorUserId))) {
+      throw new Error('FORBIDDEN');
+    }
+
+    const limit = input.limit === undefined
+      ? 50
+      : Number.isInteger(input.limit) && input.limit > 0
+        ? Math.min(input.limit, 200)
+        : 50;
+
+    return this.repository.listQueue({
+      ...input,
+      limit,
+    });
+  }
+
+  async escalateFakeBot(input: EscalateFakeBotInput): Promise<FakeBotEscalationView | null> {
+    if (!(await this.moderatorRolePort.isModerator(input.actorUserId))) {
+      throw new Error('FORBIDDEN');
+    }
+
+    const reason = input.reason.trim();
+    if (reason.length === 0) {
+      throw new Error('Fake/bot escalation reason is required');
+    }
+
+    return this.repository.escalateFakeBot({
+      ...input,
+      reason,
+      caseId: crypto.randomUUID(),
       eventId: crypto.randomUUID(),
       occurredAtEpochSeconds: nowEpochSeconds(),
     });

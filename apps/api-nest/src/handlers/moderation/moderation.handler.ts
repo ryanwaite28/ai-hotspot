@@ -2,6 +2,8 @@ import type {
   AppealModerationCaseInput,
   ReportInput,
   ResolveModerationCaseInput,
+  ModerationQueueInput,
+  EscalateFakeBotInput,
 } from '../../../../../packages/contracts/src';
 import type { NotificationModerationService } from '../../service/moderation/moderation.service';
 
@@ -27,5 +29,16 @@ export class ModerationHandler {
     body: Omit<AppealModerationCaseInput, 'actorUserId'>,
   ) {
     return this.service.appealCase({ actorUserId, ...body });
+  }
+
+  async listQueue(body: ModerationQueueInput) {
+    return this.service.listQueue(body);
+  }
+
+  async escalateFakeBot(
+    actorUserId: string,
+    body: Omit<EscalateFakeBotInput, 'actorUserId'>,
+  ) {
+    return this.service.escalateFakeBot({ actorUserId, ...body });
   }
 }

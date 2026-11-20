@@ -53,3 +53,24 @@ export interface AppealModerationCaseInput {
   caseId: string;
   appealReason: string;
 }
+
+export interface ModerationQueueInput {
+  actorUserId: string;
+  status?: ModerationCaseStatus;
+  limit?: number;
+}
+
+export interface EscalateFakeBotInput {
+  actorUserId: string;
+  targetUserId: string;
+  reason: string;
+  evidenceUrls?: string[];
+}
+
+export interface FakeBotEscalationView {
+  caseId: string;
+  targetUserId: string;
+  status: 'triaged' | 'escalated';
+  reason: string;
+  createdAt: string;
+}

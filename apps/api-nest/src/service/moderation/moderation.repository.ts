@@ -3,6 +3,9 @@ import type {
   ModerationCaseView,
   ReportInput,
   ResolveModerationCaseInput,
+  ModerationQueueInput,
+  EscalateFakeBotInput,
+  FakeBotEscalationView,
   NotificationPreferenceView,
   NotificationCategory,
   NotificationChannel,
@@ -14,4 +17,6 @@ export interface ModerationRepository {
   createReport(input: ReportInput & { caseId: string; occurredAtEpochSeconds: number }): Promise<ModerationCaseView | null>;
   resolveCase(input: ResolveModerationCaseInput & { eventId: string; occurredAtEpochSeconds: number }): Promise<ModerationCaseView | null>;
   appealCase(input: AppealModerationCaseInput & { eventId: string; occurredAtEpochSeconds: number }): Promise<ModerationCaseView | null>;
+  listQueue(input: ModerationQueueInput): Promise<ModerationCaseView[]>;
+  escalateFakeBot(input: EscalateFakeBotInput & { caseId: string; eventId: string; occurredAtEpochSeconds: number }): Promise<FakeBotEscalationView | null>;
 }

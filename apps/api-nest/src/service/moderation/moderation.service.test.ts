@@ -9,6 +9,8 @@ import type {
   ReportInput,
   ResolveModerationCaseInput,
   AppealModerationCaseInput,
+  ModerationQueueInput,
+  EscalateFakeBotInput,
 } from '../../../../../packages/contracts/src';
 import { NotificationModerationService } from './moderation.service';
 
@@ -69,9 +71,44 @@ function createHarness() {
       cases.set(appealed.caseId, appealed);
       return appealed;
     },
+    async listQueue(input: ModerationQueueInput) {
+      return Array.from(cases.values())
+        .filter((item) => input.status === undefined || item.status === input.status)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, input.limit ?? 50);
+    },
+    async escalateFakeBot(input: EscalateFakeBotInput & { caseId: string; eventId: string; occurredAtEpochSeconds: number }) {
+      const now = new Date(input.occurredAtEpochSeconds * 1000).toISOString();
+      const caseView: ModerationCaseView = {
+        caseId: input.caseId,
+        reporterUserId: input.actorUserId,
+        targetType: 'account',
+        targetId: input.targetUserId,
+        category: 'fake_bot_escalation',
+        status: 'escalated',
+        resolution: input.reason,
+        assignedModeratorUserId: input.actorUserId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      cases.set(caseView.caseId, caseView);
+      return {
+        caseId: caseView.caseId,
+        targetUserId: input.targetUserId,
+        status: 'escalated' as const,
+        reason: input.reason,
+        createdAt: now,
+      };
+    },
   };
 
-  return { service: new NotificationModerationService(repository), cases };
+  const rolePort = {
+    async isModerator(actorUserId: string) {
+      return actorUserId.startsWith('moderator-');
+    },
+  };
+
+  return { service: new NotificationModerationService(repository, rolePort), cases };
 }
 
 test('notification preferences default enabled and can disable delivery', async () => {
@@ -142,4 +179,53 @@ test('moderation report and resolution validate required text', async () => {
     }),
     /resolution is required/,
   );
+});
+
+test('moderation dashboard requires moderator role and supports queue filtering', async () => {
+  const harness = createHarness();
+  await harness.service.submitReport({
+    actorUserId: 'reporter-1',
+    targetType: 'post',
+    targetId: 'post-10',
+    category: 'spam',
+    description: 'Repeated spam post',
+  });
+
+  await assert.rejects(
+    () => harness.service.listQueue({ actorUserId: 'regular-user', status: 'open', limit: 20 }),
+    /FORBIDDEN/,
+  );
+
+  const queue = await harness.service.listQueue({
+    actorUserId: 'moderator-1',
+    status: 'open',
+    limit: 20,
+  });
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0].status, 'open');
+});
+
+test('fake/bot escalation requires moderator role and creates escalated case', async () => {
+  const harness = createHarness();
+
+  await assert.rejects(
+    () => harness.service.escalateFakeBot({
+      actorUserId: 'regular-user',
+      targetUserId: 'bot-account-1',
+      reason: 'Automated bulk creation pattern',
+      evidenceUrls: ['https://hotspot.local/evidence/bot-1'],
+    }),
+    /FORBIDDEN/,
+  );
+
+  const escalation = await harness.service.escalateFakeBot({
+    actorUserId: 'moderator-1',
+    targetUserId: 'bot-account-1',
+    reason: 'Automated bulk creation pattern',
+    evidenceUrls: ['https://hotspot.local/evidence/bot-1'],
+  });
+
+  assert.ok(escalation);
+  assert.equal(escalation?.status, 'escalated');
+  assert.equal(escalation?.targetUserId, 'bot-account-1');
 });
