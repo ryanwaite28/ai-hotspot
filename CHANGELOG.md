@@ -1,5 +1,53 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Phase 7 platform Checkout foundation
+
+### Completed
+
+- Added typed platform Checkout session request, result, and Stripe checkout port contracts.
+- Added catalog-authoritative Checkout service that resolves active tier and configured Stripe price server-side.
+- Added authenticated-actor HTTP Checkout endpoint under `/v1/billing/platform/checkout`.
+- Added local/test checkout adapter and JUnit checkout coverage.
+- Configured default Creator and Marketing tiers with explicit test price IDs.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in added Java, JUnit, Maven, migration, or documentation files.
+- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
+
+### Pending
+
+- Real Stripe SDK Checkout transport
+- HTTP webhook payload mapping
+- Persistent JDBC Stripe event ledger
+- Trial expiry worker
+- Billing integration tests and deployment evidence
+
+## 2026-11-19 — Phase 7 entitlement foundation started
+
+### Completed
+
+- Scaffolded Java 21/Maven/Spring Boot entitlement service under `services/entitlement-spring`.
+- Added typed entitlement keys, sources, grants, effective-entitlement records, service orchestration, and repository port.
+- Added one-time grant/revoke behavior with event-ID dedupe contract and active-time evaluation.
+- Added versioned platform-tier catalog records and active-tier HTTP read endpoint.
+- Added effective-entitlement HTTP read endpoint.
+- Added PostgreSQL migration foundations for tier catalog, entitlement lifecycle fields, and audit events.
+- Added JUnit unit coverage for entitlement grant/revoke and platform tier catalog behavior.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in added Java, Maven, migration, or test files.
+- Runtime Maven verification was unavailable because Java/Maven executables are not present in the current shell.
+
+### Pending
+
+- Persistent JPA/PostgreSQL repository implementation
+- Stripe Checkout and signed webhook verification/deduplication
+- Transactional grant/revoke/audit/outbox publication
+- Trial expiry worker
+- Billing API integration coverage and Kubernetes deployment evidence
+
 ## 2026-11-19 — Phase 6 stitch/duet remix foundation
 
 ### Completed
@@ -663,7 +711,6 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- `apps/api-nest/src/service/auth/auth.service.test.js`
 - Added new migration for role consistency and callback dedup event tracking:
 	- `prisma/migrations/20261119_phase1_identity_callbacks/migration.sql`
-- Updated Prisma schema with `User.role` and callback event model:
 	- `prisma/schema.prisma`
 
 ### Notes
@@ -1359,3 +1406,72 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
 - Result: 7 passed, 0 failed.
+
+## 2026-11-19 — Phase 7 persistence and Stripe dedupe continuation
+
+### Completed
+
+- Added JDBC entitlement repository with grant/revoke transaction SQL, audit events, and outbox event foundations.
+- Added HMAC-SHA256 Stripe webhook signature and timestamp verification.
+- Added Stripe event lifecycle contracts and retryable grant/revoke processor.
+- Added Stripe event status migration and entitlement grant-event dedupe migration.
+- Added JUnit coverage for duplicate/retryable Stripe events and signature verification.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in the added Java, JUnit, Maven, migration, or documentation files.
+- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
+
+### Pending
+
+- Signed Stripe Checkout endpoint
+- Real HTTP webhook payload mapping
+- Persistent JDBC Stripe event ledger implementation
+- Trial expiry worker
+- Billing API integration coverage and deployment evidence
+
+## 2026-11-20 — Phase 7 signed Stripe webhook mapping
+
+### Completed
+
+- Added typed Stripe webhook envelope/action models and payload parser.
+- Added signed `/v1/stripe/webhooks` HTTP endpoint with 400 signature-failure semantics and 200 duplicate/ignored semantics.
+- Added event mapping for checkout completion, invoice paid, subscription deleted, invoice failed, refund, and dispute events.
+- Added server-side price-to-active-platform-tier resolution before grant/revoke processing.
+- Added payload parser and webhook processor unit coverage.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in the added Java, JUnit, migration, or documentation files.
+- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
+
+### Pending
+
+- Real Stripe SDK Checkout transport
+- Persistent JDBC Stripe event ledger
+- Retry/DLQ worker integration
+- Trial expiry worker
+- Billing integration tests and deployment evidence
+
+## 2026-11-20 — Phase 7 trial expiry and billing lifecycle completion
+
+### Completed
+
+- Added a scheduled trial expiry worker with fixed-clock unit coverage and bounded batch size.
+- Added JDBC-backed trial expiry repository lookup for expired active users.
+- Added billing grant/revoke lifecycle unit coverage.
+- Added local Stripe CLI forwarding configuration for `/v1/stripe/webhooks`.
+- Added trial expiry polling environment configuration.
+- Updated `PROJECT.md` to mark Phase 7 implemented at source/scaffolding level.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in added Java, JUnit, migrations, configuration, scripts, or documentation.
+- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
+
+### Remaining production work
+
+- Real Stripe SDK Checkout transport
+- Persistent JDBC Stripe event ledger
+- Retry/DLQ worker wiring
+- Runtime migrations, integration tests, Kubernetes resources, and deployment evidence

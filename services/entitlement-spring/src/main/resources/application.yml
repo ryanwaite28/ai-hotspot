@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: hotspot-entitlement
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/hotspot}
+    username: ${POSTGRES_USER:hotspot}
+    password: ${POSTGRES_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+server:
+  port: ${ENTITLEMENT_SERVICE_PORT:8080}
+trial:
+  expiry:
+    poll-ms: ${TRIAL_EXPIRY_POLL_MS:300000}

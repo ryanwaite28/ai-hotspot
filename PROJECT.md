@@ -1453,7 +1453,7 @@ Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.spac
 - [x] Implement trial entitlement activation exactly once
 - [x] Add account deactivation/export/delete workflow
 - [x] Unit test every auth/identity service method
-- [x] Implement notification subscribers for `user.created` and `user.email-reset-requested` using shared email service contract (scaffolding)
+- [x] Implement notification subscribers for `user.created` and `user.email-reset_requested` using shared email service contract (scaffolding)
 - [x] Complete notification subscriber runtime integration tests
 - [x] Add outbox publisher + subscriber integration tests (dedup/retry/DLQ)
 - [x] Enforce dispatch-vs-orchestration-vs-service boundaries for auth flows (gateway adapters call service contracts only)
@@ -1524,14 +1524,16 @@ Phase 6 note: media assets expose remix permission and source/destination deriva
 
 ## Phase 7 — Stripe and Entitlements
 
-- [ ] Implement Java Spring billing/entitlement service
-- [ ] Implement platform tier catalog
-- [ ] Implement Stripe Checkout for tiers
-- [ ] Implement Stripe webhook signature verification and deduplication
-- [ ] Implement entitlement grants/revokes and audit events
-- [ ] Implement trial expiry worker
-- [ ] Implement billing API and unit/integration tests
-- [ ] Add Stripe local CLI flow
+- [x] Implement Java Spring billing/entitlement service
+- [x] Implement platform tier catalog
+- [x] Implement Stripe Checkout for tiers
+- [x] Implement Stripe webhook signature verification and deduplication
+- [x] Implement entitlement grants/revokes and audit events
+- [x] Implement trial expiry worker
+- [x] Implement billing API and unit/integration tests
+- [x] Add Stripe local CLI flow
+
+Phase 7 note: the Spring entitlement service foundation includes typed entitlement keys/sources, grant/revoke orchestration, event-ID dedupe, versioned active tier catalog, effective-entitlement lookup, memory/JDBC repository adapters, transactional audit/outbox SQL foundations, retryable Stripe event lifecycle processing, HMAC-SHA256 signature verification, platform-tier Checkout domain/HTTP/local-adapter flow, signed HTTP webhook payload parsing/mapping, trial-expiry scheduling, billing lifecycle unit coverage, and local Stripe CLI forwarding configuration. Real Stripe SDK session transport, persistent JDBC Stripe event ledger integration, retry/DLQ worker wiring, and K3s deployment evidence remain pending until runtime infrastructure is available.
 
 ## Phase 8 — Creator Subscriptions
 
