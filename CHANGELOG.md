@@ -1,5 +1,27 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Phase 8 creator-tier CRUD foundation
+
+### Completed
+
+- Added shared creator-tier contracts and exports.
+- Added create/update/archive service operations with creator-owner enforcement and validation.
+- Added PostgreSQL creator-tier query/repository and outbox-backed mutation SQL.
+- Added migration foundation for recurring interval, subscriber limits, and updated timestamps.
+- Added unit coverage for owner-only updates and archive behavior.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/creator-subscriptions/creator-tiers.service.test.ts`
+- Result: 2 passed, 0 failed.
+
+### Pending
+
+- Stripe Connect account setup and payout adapter
+- Creator subscription checkout
+- Tier-specific featured-content access
+- Subscriber lifecycle/cancellation/refunds/disputes/renewals
+
 ## 2026-11-20 — Phase 7 platform Checkout foundation
 
 ### Completed
@@ -715,7 +737,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 ### Notes
 
-- Node.js runtime is not installed in this environment, so test execution remains blocked even though editor diagnostics are clean.
+- Node.js runtime is not installed in this environment, so test execution remains blocked.
 
 ### Next resume point
 
@@ -1041,437 +1063,26 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Updated `PROJECT.md` Phase 1 checklist runtime items to complete.
 - Phase 1 is now complete and Phase 2 can begin.
 
-## 2026-11-19 — Phase 2 kickoff: profile and social graph foundation
+## 2026-11-20 — Phase 8 creator subscription lifecycle
 
 ### Completed
 
-- Added social contracts for profile visibility, follow status, relationship actions, and followers pagination:
-	- `packages/contracts/src/social-contracts.ts`
-	- `packages/contracts/src/index.ts`
-- Added Phase 2 social graph migration:
-	- `prisma/migrations/20261119_phase2_social_graph_foundation/migration.sql`
-- Extended Prisma schema with social graph models:
-	- `ProfileSettings`
-	- `Follow`
-	- `Block`
-	- `Mute`
-	- and corresponding `User` relations in `prisma/schema.prisma`
-- Added social query contracts with outbox-backed mutation SQL:
-	- `apps/api-nest/src/db/queries/social.queries.ts`
-- Added social repository, service, handler, and composition scaffolding:
-	- `apps/api-nest/src/service/social/postgres-social.repository.ts`
-	- `apps/api-nest/src/service/social/social.service.ts`
-	- `apps/api-nest/src/handlers/social/social.handler.ts`
-	- `apps/api-nest/src/service/social/social.composition.ts`
-- Implemented follower-list privacy rules and cursor pagination in service flow.
-- Added social unit tests and handler delegation tests:
-	- `apps/api-nest/src/service/social/social.service.test.js`
-	- `apps/api-nest/src/handlers/social/social.handler.test.js`
-	- test execution result: 4 passed, 0 failed.
-
-### Outcome
-
-- Phase 2 initial profile and social graph implementation slice is active and validated at unit-test level.
-- `PROJECT.md` Phase 2 checklist items for this slice are marked complete.
-
-## 2026-11-19 — Project plan hardening: explicit type completeness policy
-
-### Completed
-
-- Added explicit cross-language type completeness requirement to non-functional requirements (`NFR-22`) in `PROJECT.md`.
-- Strengthened section 12 rules to prohibit weak placeholder types in TypeScript and Python service/domain/repository/handler code.
-- Added cross-phase type gate language to Definition of Done section.
-- Added Testing Plan section `14.6 Static Type Gates` with CI requirements:
-	- `tsc --noEmit` strict checks for TypeScript
-	- strict `mypy` or strict pyright for Python when Python modules exist
-	- CI failure policy on banned weak placeholder type usage
-
-### Outcome
-
-- Type explicitness is now part of the project plan and phase-completion criteria, not an optional style preference.
-
-## 2026-11-19 — Targeted Type Hardening Pass (TypeScript)
-
-### Completed
-
-- Removed current `unknown`/`any`/`Record<string, unknown>` usage from previously flagged TypeScript code paths by introducing explicit shared value types and concrete interfaces.
-- Added shared contract JSON type module:
-	- `packages/contracts/src/json-types.ts`
-	- exported via `packages/contracts/src/index.ts`
-- Replaced weak event and JWT typing:
-	- `packages/contracts/src/domain-events.ts`
-	- `packages/auth/src/jwt.d.ts`
-- Removed `any` declarations from email verification helper:
-	- `packages/auth/src/email-verification.ts`
-- Added shared DB query typing primitives and migrated query modules:
-	- `apps/api-nest/src/db/queries/query.types.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
-	- `apps/api-nest/src/db/queries/outbox.queries.ts`
-	- `apps/api-nest/src/db/queries/social.queries.ts`
-	- `apps/api-nest/src/db/queries/subscriber-idempotency.queries.ts`
-- Updated dependent services/repositories to use explicit query/event payload/header types:
-	- `apps/api-nest/src/service/events/outbox-publisher.service.ts`
-	- `apps/api-nest/src/service/events/subscriber-idempotency.repository.ts`
-	- `apps/api-nest/src/service/social/postgres-social.repository.ts`
-
-### Verification
-
-- Grep verification for `: unknown`, `any`, and `Record<string, unknown>` in TypeScript declaration/source files returned no matches for the targeted patterns.
-- Re-ran impacted tests successfully:
-	- 8 passed, 0 failed (`auth`, `events`, `social` unit/integration suites).
-
-## 2026-11-19 — RabbitMQ worker adapter migrated to TypeScript + rxjs-rabbitmq
-
-### Why this existed in JavaScript
-
-- The initial notification worker adapter was created quickly during Phase 1 runtime integration as a thin infrastructure bridge and landed as `.js` while service contracts and outbox flow were still being stabilized.
-- At that point, TypeScript compiler scope focused on `apps/**` and `packages/**`, so worker adapters were not yet included in strict type-checking coverage.
-
-### What changed now
-
-- Replaced the RabbitMQ consumer adapter with a TypeScript implementation using `rxjs-rabbitmq`:
-	- `workers/notification-node/rabbitmq/notification-consumer.ts`
-- Updated imports to load the TypeScript adapter in worker bootstrap and tests:
-	- `workers/notification-node/bootstrap.js`
-	- `workers/notification-node/rabbitmq/notification-consumer.test.js`
-	- `workers/notification-node/rabbitmq/notification.runtime.integration.test.js`
-- Removed the legacy JavaScript consumer file:
-	- `workers/notification-node/rabbitmq/notification-consumer.js`
-- Expanded TypeScript include scope to cover worker TypeScript sources:
-	- `tsconfig.json`
-- Added required RabbitMQ stream client dependency:
-	- `rxjs-rabbitmq` (with `rxjs`)
-
-### Verification
-
-- Type diagnostics clean for updated files.
-- Regression test run succeeded: 11 passed, 0 failed (auth/events/social + notification consumer tests).
-
-## 2026-11-19 — Notification worker runtime modules migrated to TypeScript
-
-### Completed
-
-- Migrated remaining notification worker runtime source modules from JavaScript to TypeScript:
-	- `workers/notification-node/bootstrap.ts`
-	- `workers/notification-node/outbox-publisher.ts`
-	- `workers/notification-node/email/email-service.adapter.ts`
-	- `workers/notification-node/subscribers/event-idempotency.store.ts`
-	- `workers/notification-node/subscribers/notification-subscriber-router.ts`
-	- `workers/notification-node/subscribers/user-created-email-welcome.subscriber.ts`
-	- `workers/notification-node/subscribers/user-email-reset-requested.subscriber.ts`
-- Updated dependent test/runtime imports to reference TypeScript modules.
-- Removed replaced JavaScript runtime files for the modules above.
-
-### Verification
-
-- Worker folder source state now uses TypeScript for runtime modules; remaining `.js` files in `workers/notification-node/**` are tests only.
-- Re-ran targeted regression suites successfully:
-	- 15 passed, 0 failed (`auth`, `events`, `social`, notification consumer, notification subscriber tests).
-
-## 2026-11-19 — Cleanup option completion: strict auth typing + worker test TS migration
-
-### Completed
-
-- Resolved remaining full-project TypeScript compile blockers in auth/passkey paths by tightening repository contracts and user row mapping completeness.
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/service/auth/postgres-passkey.repository.ts`
-- Converted remaining notification worker JS tests to TypeScript:
-	- `workers/notification-node/rabbitmq/notification-consumer.test.ts`
-	- `workers/notification-node/rabbitmq/notification.runtime.integration.test.ts`
-	- `workers/notification-node/subscribers/subscribers.test.ts`
-- Removed replaced JS test files and updated runtime test script path in `package.json`.
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Regression suite passed after conversion and strict typing fixes:
-	- 15 passed, 0 failed.
-
-## 2026-11-19 — Phase 2 implementation continued: social runtime integration coverage
-
-### Completed
-
-- Added runtime PostgreSQL social harness and tests for Phase 2 social flows:
-	- `apps/api-nest/src/service/social/social.runtime.integration.harness.ts`
-	- `apps/api-nest/src/service/social/social.runtime.integration.test.ts`
-- Added Phase 2 runtime test script:
-	- `package.json` → `test:phase2:runtime`
-- Updated Phase 2 project checklist/note to reflect completed composition/runtime integration scope:
-	- `PROJECT.md`
-- Added missing TypeScript declarations for PostgreSQL client package:
-	- `@types/pg`
-
-### Verification
-
-- Full TypeScript compile passed after additions.
-- Targeted regression run passed for auth/events/social + worker tests:
-	- 15 passed, 0 failed, 2 skipped (runtime-gated social tests skipped because runtime flag was not enabled in this run).
-
-## 2026-11-19 — Phase 3 started: text posts foundation (create/draft/schedule/edit/delete/pin)
-
-### Completed
-
-- Added shared post contracts:
-	- `packages/contracts/src/post-contracts.ts`
-	- export wired in `packages/contracts/src/index.ts`
-- Added Phase 3 persistence foundation:
-	- migration: `prisma/migrations/20261119_phase3_posts_foundation/migration.sql`
-	- Prisma model: `Post` in `prisma/schema.prisma`
-- Added typed query/repository/service/handler scaffolding for post workflows:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
-	- `apps/api-nest/src/service/posts/posts.composition.ts`
-- Added tests for post service and handler:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-- Implemented outbox-backed mutation events for post workflows:
-	- `post.created`, `post.updated`, `post.deleted`, `post.pinned`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 18 passed, 0 failed (auth/events/social/posts/worker tests).
-
-## 2026-11-19 — Phase 3 continued: reply and thread-root relationships
-
-### Completed
-
-- Extended post contracts with reply/thread relationship fields and reply input:
-	- `packages/contracts/src/post-contracts.ts`
-- Added post thread relationship migration:
-	- `prisma/migrations/20261119_phase3_post_thread_relationships/migration.sql`
-- Extended Prisma post model with self-referential relationships:
-	- `prisma/schema.prisma`
-- Updated posts query/repository/service/handler to support replies and thread-root persistence:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
-- Added/updated post events and payloads for reply path:
-	- `post.replied` event emitted for reply creation.
-- Expanded tests:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 18 passed, 0 failed.
-
-## 2026-11-19 — Phase 3 continued: repost and quote operations
-
-### Completed
-
-- Extended post contracts for repost/quote fields and inputs:
-	- `packages/contracts/src/post-contracts.ts`
-- Added repost/quote schema migration:
-	- `prisma/migrations/20261119_phase3_post_repost_quote_relationships/migration.sql`
-- Extended Prisma `Post` model with repost/quote self-relationships and index:
-	- `prisma/schema.prisma`
-- Extended post query/repository/service/handler paths to support repost and quote workflows:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
-- Added post event coverage for repost/quote creates:
-	- `post.reposted`, `post.quoted`
-- Expanded tests for repost/quote service and handler delegation:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-- Corrected post insert SQL parameter ordering for scheduled/published timestamp branch conditions while extending the query module.
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 18 passed, 0 failed.
-
-## 2026-11-19 — Phase 3 continued: like/bookmark/share counters
-
-### Completed
-
-- Extended post contracts with interaction counters and interaction action/result types:
-	- `packages/contracts/src/post-contracts.ts`
-- Added migration for post counters and interaction join tables:
-	- `prisma/migrations/20261119_phase3_post_interaction_counters/migration.sql`
-- Extended Prisma models:
-	- `Post` with `likeCount`, `bookmarkCount`, `shareCount`
-	- Added `PostLike` and `PostBookmark` models with user/post relations and indexes
-	- Updated `User` with `postLikes` and `postBookmarks` relations
-	- `prisma/schema.prisma`
-- Extended posts query/repository/service/handler layers to support like/unlike/bookmark/unbookmark flows with outbox events:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
-- Added and extended tests for interaction workflows and handler delegation:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 18 passed, 0 failed.
-
-## 2026-11-19 — Phase 3 continued: chronological following/public/topic feed
-
-### Completed
-
-- Extended post contracts for feed query/pagination types:
-	- `packages/contracts/src/post-contracts.ts`
-- Added feed query SQL for chronological timelines with cursor pagination:
-	- following feed,
-	- public feed,
-	- topic feed,
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-- Extended posts repository/service/handler layers with feed methods:
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-	- `apps/api-nest/src/handlers/posts/posts.handler.ts`
-- Added feed behavior and delegation test coverage:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 19 passed, 0 failed.
-
-## 2026-11-19 — Phase 3 continued: post privacy and block checks
-
-### Completed
-
-- Added relationship-state query support for post access checks:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-	- `apps/api-nest/src/service/posts/postgres-posts.repository.ts`
-- Added service-layer post visibility and block checks for:
-	- replies,
-	- reposts,
-	- quotes,
-	- like/unlike/bookmark/unbookmark interactions,
-	- `apps/api-nest/src/service/posts/posts.service.ts`
-- Added following-feed block filtering in SQL:
-	- `apps/api-nest/src/db/queries/posts.queries.ts`
-- Extended posts service tests with focused privacy/block assertions:
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 20 passed, 0 failed.
-
-## 2026-11-19 — Phase 3 completed: full text-post test suite
-
-### Completed
-
-- Added runtime posts integration harness and tests:
-	- `apps/api-nest/src/service/posts/posts.runtime.integration.harness.ts`
-	- `apps/api-nest/src/service/posts/posts.runtime.integration.test.ts`
-- Added Phase 3 runtime test script:
-	- `package.json` (`test:phase3:runtime`)
-- Expanded post service and handler unit tests to cover:
-	- repost/quote,
-	- like/unlike/bookmark/unbookmark,
-	- chronological following/public/topic feed pagination,
-	- privacy/block interaction guardrails,
-	- `apps/api-nest/src/service/posts/posts.service.test.js`
-	- `apps/api-nest/src/handlers/posts/posts.handler.test.js`
-
-### Verification
-
-- Full TypeScript compile passed (`npx tsc --noEmit -p tsconfig.json`).
-- Targeted regression suite passed:
-	- 20 passed, 0 failed, 2 skipped (runtime integration tests skipped without `PHASE3_RUNTIME_INTEGRATION=1`).
-
-## 2026-11-19 — Phase 6 derivative attribution and takedown propagation
-
-### Completed
-
-- Extended derivative relationship contracts with immutable attribution fields and lifecycle/takedown states.
-- Added derivative lifecycle repository operations and SQL for processing, ready, rejected, and takedown transitions.
-- Added source-authorized takedown propagation across downstream derivative relationships.
-- Added derivative status/takedown outbox events and attribution payload fields.
-- Added lifecycle and source-takedown unit coverage.
-- Updated `PROJECT.md` to mark Phase 6 complete.
+- Added creator subscription and checkout contracts.
+- Added active-tier HTTPS checkout initiation.
+- Added subscription activation, renewal, past-due, refund, and cancellation states.
+- Added active-period tier access checks for creator owners and subscribers.
+- Added subscriber cancellation operations and webhook lifecycle updates.
+- Added creator subscription lifecycle migration.
+- Added unit coverage for checkout, access, cancellation, renewal, refund, and past-due behavior.
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
-- Result: 7 passed, 0 failed.
-
-## 2026-11-19 — Phase 7 persistence and Stripe dedupe continuation
-
-### Completed
-
-- Added JDBC entitlement repository with grant/revoke transaction SQL, audit events, and outbox event foundations.
-- Added HMAC-SHA256 Stripe webhook signature and timestamp verification.
-- Added Stripe event lifecycle contracts and retryable grant/revoke processor.
-- Added Stripe event status migration and entitlement grant-event dedupe migration.
-- Added JUnit coverage for duplicate/retryable Stripe events and signature verification.
-
-### Verification evidence
-
-- Source/VS Code diagnostics: no errors found in the added Java, JUnit, Maven, migration, or documentation files.
-- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/creator-subscriptions/creator-tiers.service.test.ts apps/api-nest/src/service/creator-subscriptions/creator-payout-account.service.test.ts apps/api-nest/src/service/creator-subscriptions/creator-subscriptions.service.test.ts`
+- Result: 8 passed, 0 failed.
 
 ### Pending
 
-- Signed Stripe Checkout endpoint
-- Real HTTP webhook payload mapping
-- Persistent JDBC Stripe event ledger implementation
-- Trial expiry worker
-- Billing API integration coverage and deployment evidence
-
-## 2026-11-20 — Phase 7 signed Stripe webhook mapping
-
-### Completed
-
-- Added typed Stripe webhook envelope/action models and payload parser.
-- Added signed `/v1/stripe/webhooks` HTTP endpoint with 400 signature-failure semantics and 200 duplicate/ignored semantics.
-- Added event mapping for checkout completion, invoice paid, subscription deleted, invoice failed, refund, and dispute events.
-- Added server-side price-to-active-platform-tier resolution before grant/revoke processing.
-- Added payload parser and webhook processor unit coverage.
-
-### Verification evidence
-
-- Source/VS Code diagnostics: no errors found in the added Java, JUnit, migration, or documentation files.
-- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
-
-### Pending
-
-- Real Stripe SDK Checkout transport
-- Persistent JDBC Stripe event ledger
-- Retry/DLQ worker integration
-- Trial expiry worker
-- Billing integration tests and deployment evidence
-
-## 2026-11-20 — Phase 7 trial expiry and billing lifecycle completion
-
-### Completed
-
-- Added a scheduled trial expiry worker with fixed-clock unit coverage and bounded batch size.
-- Added JDBC-backed trial expiry repository lookup for expired active users.
-- Added billing grant/revoke lifecycle unit coverage.
-- Added local Stripe CLI forwarding configuration for `/v1/stripe/webhooks`.
-- Added trial expiry polling environment configuration.
-- Updated `PROJECT.md` to mark Phase 7 implemented at source/scaffolding level.
-
-### Verification evidence
-
-- Source/VS Code diagnostics: no errors found in added Java, JUnit, migrations, configuration, scripts, or documentation.
-- Runtime Maven verification remains unavailable because Java/Maven executables are not present in the current shell.
-
-### Remaining production work
-
-- Real Stripe SDK Checkout transport
-- Persistent JDBC Stripe event ledger
-- Retry/DLQ worker wiring
-- Runtime migrations, integration tests, Kubernetes resources, and deployment evidence
+- Real Stripe Connect SDK transport and payout webhooks
+- External subscription provider integration
+- Subscriber administration UI
+- Runtime Stripe integration evidence

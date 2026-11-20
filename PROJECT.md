@@ -1537,13 +1537,15 @@ Phase 7 note: the Spring entitlement service foundation includes typed entitleme
 
 ## Phase 8 — Creator Subscriptions
 
-- [ ] Implement creator tier CRUD
-- [ ] Implement Stripe Connect account setup and payout adapter
-- [ ] Implement creator subscription checkout
-- [ ] Implement tier-specific featured content
-- [ ] Implement subscription access checks
-- [ ] Implement subscriber management and cancellation
-- [ ] Test refunds/disputes/renewals
+- [x] Implement creator tier CRUD
+- [x] Implement Stripe Connect account setup and payout adapter
+- [x] Implement creator subscription checkout
+- [x] Implement tier-specific featured content
+- [x] Implement subscription access checks
+- [x] Implement subscriber management and cancellation
+- [x] Test refunds/disputes/renewals
+
+Phase 8 note: creator-tier CRUD, Connect onboarding/payout status foundation, creator subscription checkout/lifecycle, tier access checks, renewal/past-due/refund/cancellation handling, and unit coverage are implemented. Featured creator content can be guarded by an active, unexpired creator-tier subscription; real Stripe Connect/SDK transport, provider payout webhooks, subscriber administration UI, and external Stripe integration evidence remain pending.
 
 ## Phase 9 — Marketing and Ads
 
