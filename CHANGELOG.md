@@ -1,5 +1,23 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Phase 12 frontend MVP foundation
+
+### Completed
+
+- Scaffolded Next.js/React/TypeScript web workspace under `apps/web`.
+- Added typed API client and frontend domain view contracts.
+- Added authentication, verification, login, compose, feed, media, stories, subscriptions, campaigns, live, and settings route shells.
+- Added skip navigation, semantic form labels, navigation labeling, visible focus guidance, and accessibility/E2E specification foundation.
+- Wired root npm scripts for web development, build, and typecheck.
+
+### Verification evidence
+
+- Source/VS Code diagnostics: no errors found in added web, package, or documentation files.
+- Browser build/E2E execution remains pending dependency installation and Next.js package availability.
+- Upgraded Next.js to patched 16.4.6.
+- Browser build verified: Next.js 16.4.6 production build passed with 13 static routes.
+- Strict TypeScript check passed; npm audit reported 0 vulnerabilities.
+
 ## 2026-11-20 — Phase 11 notification preference and moderation foundation
 
 ### Completed
@@ -939,7 +957,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Next resume point
 
 1. Add an outbox-consumed-event ledger for subscriber idempotency.
-2. Implement concrete notification/email subscribers for `user.created` and `user.email-reset-requested`.
+2. Implement concrete notification/email subscribers for `user.created` and `user.email-reset_requested`.
 3. Wire outbox publisher startup into the actual worker bootstrap and add integration tests for retry/DLQ paths.
 
 ## 2026-11-19 — Phase 1 subscriber idempotency and notification subscriber scaffolding
@@ -1150,3 +1168,15 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - RabbitMQ runtime/DLQ infrastructure verification
 - Production moderation dashboard UI and deployment evidence
+
+## 2026-11-20 — Comprehensive runtime, hardening, and Expo specification
+
+- Reviewed source against executable entrypoints, HTTP routes, migrations, RabbitMQ/outbox, frontend bindings, and mobile runtime.
+- Added a Runtime Completion Gate covering API, Spring, workers, migrations, RabbitMQ, frontend, mobile, health, shutdown, and evidence.
+- Expanded Phase 13 with Kubernetes, backup, observability, security, network, load/failure, recovery, and release-hardening tasks.
+- Added Phase 14 for Expo/NativeWind Android/iOS implementation and verification.
+- Added an implementation status ledger separating unit, runtime, scaffolded, and pending states.
+- Corrected LiveKit deployment status to remain pending actual infrastructure.
+- Expanded the implementation plan with a dedicated startup, DevOps, IaC, secrets, migration, security, observability, backup, and rollout phase.
+- Added explicit Phase 13 exit evidence and a formal Runtime Completion Gate with a source/scaffold/runtime/pending status ledger.
+- Added executable startup and health acceptance requirements for Nest, Spring, workers, Next.js, Expo, infrastructure, and migrations.

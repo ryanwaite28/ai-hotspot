@@ -11,15 +11,17 @@
     "test:phase2:runtime": "PHASE2_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/social/social.runtime.integration.test.ts",
     "test:phase3:runtime": "PHASE3_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/posts/posts.runtime.integration.test.ts",
     "test:phase4:runtime": "PHASE4_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.runtime.integration.test.ts",
-    "test:e2e": "echo 'TODO: wire e2e tests'",
+    "test:e2e": "npm --prefix apps/web run test:e2e",
     "db:migrate": "echo 'TODO: add migration tooling (Prisma/Flyway)'",
     "db:seed": "bash scripts/seed-local.sh",
-    "dev": "echo 'TODO: start local app processes'",
+    "dev": "npm --prefix apps/web run dev",
     "worker:media": "node -r ts-node/register/transpile-only workers/media-node/main.ts",
     "worker:cleanup": "node -r ts-node/register/transpile-only workers/cleanup-node/main.ts",
     "deploy:dev": "bash ci/deploy.sh dev",
     "deploy:prod": "bash ci/deploy.sh prod",
-    "stripe:listen": "bash scripts/stripe-listener.sh"
+    "stripe:listen": "bash scripts/stripe-listener.sh",
+    "web:build": "npm --prefix apps/web run build",
+    "web:typecheck": "npm --prefix apps/web run typecheck"
   },
   "engines": {
     "node": ">=22"

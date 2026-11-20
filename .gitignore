@@ -5,6 +5,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Next
+.next/
+apps/web/.next/
+
 # Python
 __pycache__/
 *.pyc

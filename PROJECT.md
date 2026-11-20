@@ -1458,7 +1458,33 @@ Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.spac
 - [x] Add outbox publisher + subscriber integration tests (dedup/retry/DLQ)
 - [x] Enforce dispatch-vs-orchestration-vs-service boundaries for auth flows (gateway adapters call service contracts only)
 
-Phase 1 note: registration, email-verification callback, JWT refresh rotation, account-status gating with role claims, identity-verification provider session start flow, signed identity-verification callback deduplication, passkey challenge/credential flow scaffolding, trial activation-once and account lifecycle workflow scaffolding, full auth mutation outbox scaffolding (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset_requested`), and notification subscriber scaffolding are implemented at service/repository level with dispatch+composition wiring. Phase 1 runtime/integration matrix executed green.
+#### FR-AUTH-01 — Registration and email verification
+- [ ] Add users, verification, session, and audit migrations.
+- [ ] Implement register/verify routes and duplicate/expired/verified states.
+- [ ] Emit `user.created` and email-verification events transactionally.
+
+#### FR-AUTH-02 / FR-AUTH-03 / FR-AUTH-04 — Sessions and MFA
+- [ ] Add refresh-token, passkey, MFA, and revocation migrations.
+- [ ] Implement JWT rotation, reuse detection, WebAuthn, and privileged MFA gates.
+- [ ] Test expiry, logout, reuse, challenge replay, and MFA-denied outcomes.
+
+#### FR-AUTH-05 — Account lifecycle
+- [ ] Add suspension, deactivation, export, deletion, and retention migrations.
+- [ ] Expose confirmation-driven lifecycle routes and append-only audit events.
+- [ ] Test restore, export, irreversible deletion, and replay behavior.
+
+#### FR-AUTH-06 / FR-AUTH-07 / FR-AUTH-08 / FR-AUTH-09 — Identity verification
+- [ ] Add provider subject, callback, status, failure, and dedupe migrations.
+- [ ] Implement signed callback, duplicate-identity detection, and safe failure contracts.
+- [ ] Store only provider references/outcomes and gate public publishing.
+
+#### FR-AUTH-10 — Bot prevention
+- [ ] Add automation/bulk-account signals and review/escalation state.
+- [ ] Reject posting rights for prohibited synthetic/automated accounts.
+- [ ] Test bulk registration, duplicate identity, escalation, and restriction behavior.
+
+#### Cross-cutting runtime exit for Phase 1
+- [ ] Verify migrations, runnable routes, JWT/passkey, outbox, broker, and notification evidence.
 
 ## Phase 2 — Profiles and Social Graph
 
@@ -1473,6 +1499,28 @@ Phase 1 note: registration, email-verification callback, JWT refresh rotation, a
 
 Phase 2 note: service/repository/handler scaffolding for profile and social graph flows is implemented with outbox-backed mutation events (`profile.updated`, `follow.requested`, `follow.accepted`, `follow.removed`, `user.blocked`, `user.muted`), follower-list privacy enforcement, cursor pagination, and runtime PostgreSQL integration coverage for profile updates plus protected-follow lifecycle.
 
+#### FR-SOCIAL-01 / FR-SOCIAL-02 — Profiles and handles
+- [ ] Add profile, handle-history, redirect, visibility, and media migrations.
+- [ ] Implement profile update and unique handle redirect behavior.
+- [ ] Test conflicts, old handles, privacy, and profile deletion.
+
+#### FR-SOCIAL-03 / FR-SOCIAL-04 — Relationship operations
+- [ ] Add follow/request/approve/reject/remove/block/mute migrations.
+- [ ] Expose relationship routes and actor/privacy authorization.
+- [ ] Emit relationship mutation events transactionally and test duplicates/replays.
+
+#### FR-SOCIAL-05 / FR-SOCIAL-06 — Blocking and profile visibility
+- [ ] Implement bidirectional block visibility and muted notification behavior.
+- [ ] Expose mutual-follow/subscription state only under policy.
+- [ ] Test protected, blocked, muted, suspended, and deleted accounts.
+
+#### FR-SOCIAL-07 — Cursor pagination
+- [ ] Add deterministic ordering and opaque cursor contracts.
+- [ ] Test first/last/empty/invalid/concurrent-pagination behavior.
+
+#### Cross-cutting runtime exit for Phase 2
+- [ ] Verify PostgreSQL migrations, profile/social routes, privacy decisions, and outbox evidence.
+
 ## Phase 3 — Text Posts and Threads
 
 - [x] Implement post creation/draft/schedule/edit/delete/pin
@@ -1484,6 +1532,34 @@ Phase 2 note: service/repository/handler scaffolding for profile and social grap
 - [x] Add full text-post test suite
 
 Phase 3 note: posts foundation scaffolding is implemented with typed contracts, PostgreSQL `posts` schema + interaction migrations/model, repository/service/handler composition, outbox-backed mutation events (`post.created`, `post.replied`, `post.reposted`, `post.quoted`, `post.updated`, `post.deleted`, `post.pinned`, `post.liked`, `post.unliked`, `post.bookmarked`, `post.unbookmarked`), reply/thread-root persistence (`parent_post_id`, `thread_root_post_id`), repost/quote persistence (`repost_of_post_id`, `quote_of_post_id`), interaction counters (`like_count`, `bookmark_count`, `share_count`), cursor-based chronological following/public/topic feed retrieval, service-layer post visibility and block checks for source interactions, and expanded text-post test coverage (service/handler plus runtime integration harness/tests).
+
+#### FR-POST-01 / FR-POST-02 — Post lifecycle
+- [ ] Add posts, edit-history, schedule, pin, and deletion migrations.
+- [ ] Expose create/draft/schedule/edit/delete/pin/unpin routes.
+- [ ] Test max length, scheduled publication, editing, pinning, and deletion.
+
+#### FR-POST-03 — Replies and threads
+- [ ] Add parent/direct/thread-root migrations and indexes.
+- [ ] Expose nested reply routes and chronological thread retrieval.
+- [ ] Test deep threads, deleted parents, and takedown behavior.
+
+#### FR-POST-04 / FR-POST-05 — Reactions and repost/quote policy
+- [ ] Add repost/quote/like/bookmark/share migrations with uniqueness rules.
+- [ ] Enforce source privacy, blocking, deletion, and takedown rules.
+- [ ] Test duplicate interactions and source-policy changes.
+
+#### FR-POST-06 / FR-POST-07 — History and deletion
+- [ ] Append post edits and moderation-retention events.
+- [ ] Expose edit history and public deletion semantics.
+- [ ] Test edit visibility, cache invalidation, and moderation retention.
+
+#### FR-POST-08 — Chronological discovery
+- [ ] Implement following/public/topic/bookmark feed pagination.
+- [ ] Exclude blocked, muted, deleted, suspended, and hidden content.
+- [ ] Test deterministic cursor ordering and prohibited ranking fields.
+
+#### Cross-cutting runtime exit for Phase 3
+- [ ] Verify PostgreSQL, API, feed/privacy services, outbox events, and pagination smoke evidence.
 
 ## Phase 4 — Media Foundation
 
@@ -1501,6 +1577,29 @@ Phase 3 note: posts foundation scaffolding is implemented with typed contracts, 
 
 Phase 4 note: object-storage upload sessions, size/MIME validation, upload-complete callback flow (`uploading -> uploaded -> processing`), Mongo metadata repository wiring (with local fallback), RabbitMQ processing consumer/subscriber scaffolding, runnable media worker bootstrap, thumbnail/transcode status contract with immutable derivative key/cache headers, media comments/replies, photo carousel links, media unit/runtime-integration harness coverage, and an in-cluster media caching gateway + ingress deployment path are implemented. Full transcode execution internals remain pending.
 
+#### FR-MEDIA-01 / FR-MEDIA-03 — Upload sessions and validation
+- [ ] Add upload-session, object-key, MIME, size, duration, and expiry migrations.
+- [ ] Expose resumable upload-session/callback routes with short-lived credentials.
+- [ ] Reject unsupported MIME, oversized files, excessive duration, and unowned callbacks.
+
+#### FR-MEDIA-02 / FR-MEDIA-04 — Processing and publication
+- [ ] Add processing-status, derivative, fingerprint, and thumbnail migrations/collections.
+- [ ] Implement worker processing contracts and READY/human-override publication gates.
+- [ ] Test retry/DLQ, stale callbacks, processing failure, and duplicate completion.
+
+#### FR-MEDIA-05 / FR-MEDIA-06 — Metadata, carousels, and comments
+- [ ] Add carousel, caption, alt-text, location-opt-in, tag, and comment/reply migrations.
+- [ ] Expose media publish/update/comment routes and ownership/moderation checks.
+- [ ] Test ordering, location consent, alt text, and hidden/deleted comments.
+
+#### FR-MEDIA-07 / FR-MEDIA-08 / FR-MEDIA-09 — Remix rights and derivatives
+- [ ] Add remix permission, source/destination, attribution, and derivative-status migrations.
+- [ ] Require both remix permissions and authorized ownership before derivative processing.
+- [ ] Test takedown propagation and publication only after derivative safety/metadata processing.
+
+#### Cross-cutting runtime exit for Phase 4
+- [ ] Verify object storage, Mongo/PostgreSQL, RabbitMQ queue/DLQ, worker callback, cache gateway, and READY media smoke evidence.
+
 ## Phase 5 — Stories
 
 - [x] Implement story creation and 24-hour expiry
@@ -1511,16 +1610,45 @@ Phase 4 note: object-storage upload sessions, size/MIME validation, upload-compl
 
 Phase 5 note: story publish scaffolding now requires a ready media asset owned by the actor, writes `story.created` outbox events, assigns a strict 24-hour expiry window, and includes an explicit expiry cleanup path that emits `story.expired` outbox events when expired records are removed. Active-story visibility checks now enforce `public`, `followers`, and owner-only `close_friends` access semantics, and story-viewer records are tracked (Mongo-backed with local in-memory fallback) with owner-only viewer summary access. Story replies now enqueue `story.reply.created` outbox events for notification delivery, a dedicated cleanup worker runtime calls the stories expiry API on a configurable interval, and test coverage now includes exact-expiry and hidden/blocked access behavior.
 
-## Phase 6 — Stitch and Duet
+#### FR-STORY-01 / FR-STORY-02 — Publishing and expiry
+- [ ] Add story and expiry migrations with exact 24-hour expiration from successful processing.
+- [ ] Expose create/list/expire routes and cleanup worker startup/API callback contracts.
+- [ ] Test exact expiry, replayed cleanup, deleted media, and public deep-link exclusion.
 
-- [x] Implement remix permission on media assets
-- [x] Implement derivative relationship model
-- [x] Implement stitch timeline assembly contract
-- [x] Implement duet split-screen contract
-- [x] Enforce source author attribution and takedown propagation
-- [x] Add derivative media processing tests
+#### FR-STORY-03 / FR-STORY-04 — Viewers and replies
+- [ ] Add bounded-retention story-view and story-reply migrations/collections.
+- [ ] Expose owner-only viewer summary and owner inbox reply behavior.
+- [ ] Test unauthorized viewer access, duplicate views, reply delivery, and retention.
+
+#### FR-STORY-05 / FR-STORY-06 — Visibility and privacy disclosure
+- [ ] Implement public/follower/close-friend visibility and block/privacy checks.
+- [ ] Document screenshot/download non-prevention and avoid any false privacy or DRM claim.
+- [ ] Test hidden, blocked, suspended, expired, and close-friend viewers.
+
+#### Cross-cutting runtime exit for Phase 5
+- [ ] Verify story migrations/TTL, cleanup worker startup, exact expiry, notification routing, and runtime evidence.
+
+## Phase 6 — Stitch and Duet Media
+
+- [x] Implement stitch and duet creation with remix rights validation
+- [x] Implement derivative processing and publication
+- [x] Add MongoDB collections for derivative metadata
+- [x] Add integration tests for stitch/duet flows
 
 Phase 6 note: media assets expose remix permission and source/destination derivative relationships. Stitch and duet creation validates READY assets, both remix permissions, actor ownership of at least one asset, timeline/split-layout assembly shape, duplicate relationship protection, and outbox-backed `media.derivative.created` mutation events. Derivative records preserve immutable source/destination/creator attribution, support created/processing/ready/rejected/takedown lifecycle transitions, propagate source takedowns to dependent relationships, and emit derivative status/takedown events. Unit coverage includes allowed stitch/duet creation, blocked/unready/invalid derivatives, attribution propagation, lifecycle transitions, and source takedown propagation.
+
+#### FR-MEDIA-07 / FR-MEDIA-08 — Stitch and duet authorization
+- [ ] Add derivative source/destination/owner/attribution/status migrations.
+- [ ] Expose stitch/duet create/status routes and validate READY assets, remix rights, ownership, and duplicates.
+- [ ] Test timeline/split assembly, attribution, blocked sources, takedowns, and rejected derivatives.
+
+#### FR-MEDIA-09 — Derivative processing publication
+- [ ] Implement derivative processing, transcript/thumbnail/policy, and READY publication contracts.
+- [ ] Emit derivative created/status/takedown events transactionally through outbox/RabbitMQ.
+- [ ] Verify source attribution, destination processing, takedown propagation, and runtime derivative evidence.
+
+#### Cross-cutting runtime exit for Phase 6
+- [ ] Attach derivative migrations, API routes, worker callback/status, outbox, RabbitMQ, and duplicate/takedown evidence.
 
 ## Phase 7 — Stripe and Entitlements
 
@@ -1535,6 +1663,48 @@ Phase 6 note: media assets expose remix permission and source/destination deriva
 
 Phase 7 note: the Spring entitlement service foundation includes typed entitlement keys/sources, grant/revoke orchestration, event-ID dedupe, versioned active tier catalog, effective-entitlement lookup, memory/JDBC repository adapters, transactional audit/outbox SQL foundations, retryable Stripe event lifecycle processing, HMAC-SHA256 signature verification, platform-tier Checkout domain/HTTP/local-adapter flow, signed HTTP webhook payload parsing/mapping, trial-expiry scheduling, billing lifecycle unit coverage, and local Stripe CLI forwarding configuration. Real Stripe SDK session transport, persistent JDBC Stripe event ledger integration, retry/DLQ worker wiring, and K3s deployment evidence remain pending until runtime infrastructure is available.
 
+#### FR-BILL-01 — Entitlement keys and sources
+- [ ] Add entitlement-key, source, source-reference, audit, and outbox migrations.
+- [ ] Implement trial, platform subscription, creator subscription, and admin-grant source adapters.
+- [ ] Test effective-entitlement resolution and source precedence.
+
+#### FR-BILL-02 / FR-BILL-03 — Trial activation and expiry
+- [ ] Add exactly-once trial activation migration and verified-account activation guard.
+- [ ] Implement 7×24-hour expiry scheduling and entitlement removal.
+- [ ] Retain core social capabilities after trial expiry and append an audit event.
+- [ ] Test first activation, recreation, support retry, expiry, and reactivation attempts.
+
+#### FR-BILL-04 — Versioned platform tiers
+- [ ] Add tier catalog and entitlement-bundle migrations/JPA mappings.
+- [ ] Implement tier version lookup and bundle precedence.
+- [ ] Test upgrade, downgrade, expired tier, and bundle overlap behavior.
+
+#### FR-BILL-05 — Stripe Checkout
+- [ ] Add server-created platform-tier Checkout session and return/cancel routes.
+- [ ] Integrate the Stripe SDK through an adapter and fail-fast secret validation.
+- [ ] Reject browser-reported payment/tier state and test success/cancel/return flows.
+
+#### FR-BILL-06 / FR-BILL-07 — Webhook authority and idempotency
+- [ ] Add signed webhook, event-ID dedupe, replay, retry, and failure migrations.
+- [ ] Verify signatures before entitlement mutation and process events independently/retryably.
+- [ ] Transactionally write entitlement/audit state and the domain outbox record.
+- [ ] Test duplicate, replay, out-of-order, malformed, and retryable webhook events.
+
+#### FR-BILL-08 — Refunds and disputes
+- [ ] Map refund, dispute, chargeback, renewal, cancellation, and invoice states to entitlement policy.
+- [ ] Implement period-end or immediate suspension according to durable Stripe state.
+- [ ] Test reconciliation, retry, duplicate-event, and audit behavior.
+
+#### FR-BILL-09 — Server-authoritative paid actions
+- [ ] Add effective-entitlement authorization guards to every paid route.
+- [ ] Expose entitlement audit lookup but never accept browser tier claims.
+- [ ] Test denied, active, trial, expired, revoked, and suspended outcomes.
+
+#### Cross-cutting runtime exit for Phase 7
+- [ ] Add Spring datasource/startup/health/controller/scheduler configuration.
+- [ ] Publish `entitlement.granted` and `entitlement.revoked` through outbox/RabbitMQ.
+- [ ] Attach Java/Maven, PostgreSQL, Spring, Stripe CLI, webhook, scheduler, and RabbitMQ evidence.
+
 ## Phase 8 — Creator Subscriptions
 
 - [x] Implement creator tier CRUD
@@ -1546,6 +1716,40 @@ Phase 7 note: the Spring entitlement service foundation includes typed entitleme
 - [x] Test refunds/disputes/renewals
 
 Phase 8 note: creator-tier CRUD, Connect onboarding/payout status foundation, creator subscription checkout/lifecycle, tier access checks, renewal/past-due/refund/cancellation handling, and unit coverage are implemented. Featured creator content can be guarded by an active, unexpired creator-tier subscription; real Stripe Connect/SDK transport, provider payout webhooks, subscriber administration UI, and external Stripe integration evidence remain pending.
+
+#### FR-CREATE-01 — Creator tier configuration
+- [ ] Add creator-tier, benefit, limit, period, and status migrations.
+- [ ] Expose create/read/update/archive/restore tier routes.
+- [ ] Validate name, price, interval, description, benefits, currency, and subscriber limits.
+
+#### FR-CREATE-02 — Stripe Connect payouts
+- [ ] Add payout-account/status migrations and Connect onboarding state.
+- [ ] Implement account-link, account-status, payout, and webhook adapters.
+- [ ] Gate paid tier creation and payouts on MFA and payout readiness.
+
+#### FR-CREATE-03 — Featured creator content
+- [ ] Add public/subscriber/tier-specific featured-content visibility fields.
+- [ ] Expose featured-post/media collection create/read/update/delete routes.
+- [ ] Test public, active, wrong-tier, expired, canceled, and blocked access.
+
+#### FR-CREATE-04 / FR-CREATE-05 — Subscription lifecycle
+- [ ] Add subscription, period, cancellation, refund, and dispute migrations.
+- [ ] Implement signed Checkout, renewal, period-end, past-due, refund, and dispute flows.
+- [ ] Derive access only from durable Stripe-confirmed state.
+
+#### FR-CREATE-06 — Supporter features
+- [ ] Implement supporter-only thread and chat visibility contracts.
+- [ ] Enforce membership changes across featured content and communication services.
+- [ ] Test active, expired, refunded, canceled, and creator-blocked subscribers.
+
+#### FR-CREATE-07 — Trial preview versus paid confirmation
+- [ ] Permit trial-account preview and subscription-management navigation.
+- [ ] Require completed Checkout and durable provider confirmation for paid access.
+- [ ] Test expired-trial, canceled-checkout, duplicate-checkout, and confirmed outcomes.
+
+#### Cross-cutting runtime exit for Phase 8
+- [ ] Transactionally publish subscription and entitlement events through outbox/RabbitMQ.
+- [ ] Attach PostgreSQL, Stripe SDK/CLI, Connect, webhook, entitlement, and subscription evidence.
 
 ## Phase 9 — Marketing and Ads
 
@@ -1559,61 +1763,228 @@ Phase 8 note: creator-tier CRUD, Connect onboarding/payout status foundation, cr
 
 Phase 9 note: campaign contracts, draft/review/approval/status lifecycle, paid/trial entitlement gates, budget/schedule/HTTPS placement validation, aggregate metrics contracts, clearly labeled sponsored placement metadata, and sensitive/PII targeting prohibition are implemented. External ad billing, real aggregate ingestion/reporting persistence, and moderation-review operator workflow remain pending.
 
+#### FR-MKT-01 — Entitlement gate
+- [ ] Require paid/trial entitlement and verified identity on campaign create/submit/report routes.
+- [ ] Reject free, expired, revoked, suspended-account outcomes.
+- [ ] Never trust browser-reported entitlement state.
+
+#### FR-MKT-02 — Campaign configuration
+- [ ] Add objective, placement, category, budget, schedule, creative, and destination migrations.
+- [ ] Expose create/read/update/archive/submit/pause/cancel routes.
+- [ ] Validate budget, currency, time range, HTTPS destination, creative, placement, and category.
+
+#### FR-MKT-03 — Authorization and campaign review
+- [ ] Require payment authorization, ad-policy review, identity verification, and location validation.
+- [ ] Implement draft/submit/review/approved/rejected/paused/canceled state transitions.
+- [ ] Test invalid identity, payment, destination, creative, and transition behavior.
+
+#### FR-MKT-04 — Sponsored disclosure
+- [ ] Add immutable placement/disclosure metadata.
+- [ ] Render clearly labeled sponsored placement in web/mobile payload consumers.
+- [ ] Test disclosure presence and absence of inferred-personalization fields.
+
+#### FR-MKT-05 — Aggregate reporting
+- [ ] Add aggregate impression/click/spend/region metrics migrations or collections.
+- [ ] Implement least-data metric ingestion and campaign reporting.
+- [ ] Reject individual-person sales and PII-bearing ad metrics.
+
+#### FR-MKT-06 — Pause, cancellation, and refunds
+- [ ] Implement pause/resume/cancel and delivered-versus-undelivered spend calculation.
+- [ ] Integrate durable payment/refund state into refundable estimates.
+- [ ] Test cancellation before start, during delivery, after delivery, and provider retries.
+
+#### FR-MKT-07 / FR-MKT-08 — Privacy and targeting restrictions
+- [ ] Reject sensitive-interest, behavioral-profile, personal-demographic, and PII targeting.
+- [ ] Permit country/region, explicit category, and explicit following/creator affinity only.
+- [ ] Add prohibited-targeting audit events and privacy tests.
+
+#### Cross-cutting runtime exit for Phase 9
+- [ ] Implement real payment, aggregate-ingestion, audit, and moderation-review adapters.
+- [ ] Transactionally emit campaign events through outbox/RabbitMQ.
+- [ ] Attach billing, reporting, moderation, UI, and privacy runtime evidence.
+
 ## Phase 10 — Live Streaming
 
-- [x] Deploy and isolate LiveKit
-- [x] Implement stream scheduling/start/end
-- [x] Implement short-lived publishing credentials
-- [x] Implement viewer entitlement enforcement
-- [x] Implement live chat and moderation
-- [x] Implement follower/subscriber-only rooms
-- [x] Implement opt-in recording and VOD visibility
-- [x] Add live lifecycle tests
+- [x] Implement live-stream scheduling/start/end lifecycle foundation
+- [x] Implement short-lived publishing credential contracts
+- [x] Implement entitlement and audience visibility gates
+- [x] Implement live lifecycle unit coverage
+- [ ] Deploy and isolate LiveKit
+- [ ] Implement real LiveKit provider SDK room transport
+- [ ] Implement durable chat/moderation persistence
 
-Phase 10 note: live-stream scheduling, start/end lifecycle transitions, short-lived room credentials, paid entitlement gates, public/followers/subscribers visibility enforcement, live chat validation/moderation states, opt-in recording, and unit lifecycle coverage are implemented. Real LiveKit/K3s deployment, provider room SDK transport, and durable chat/moderation persistence remain pending runtime/provider work.
+Phase 10 note: live-stream scheduling, lifecycle transitions, paid entitlement gates, public/follower/subscriber visibility, chat lifecycle, and opt-in recording contracts are implemented. Real LiveKit/K3s deployment, provider SDK transport, chat persistence, and runtime evidence remain pending.
+
+#### FR-LIVE-01 — Live entitlement gate
+- [ ] Require paid trial/tier entitlement and verified identity before schedule/start routes.
+- [ ] Reject free, expired, revoked, suspended, and unverified creators.
+- [ ] Test browser-reported entitlement claims cannot bypass server enforcement.
+
+#### FR-LIVE-02 — Stream lifecycle
+- [ ] Add schedule, start, pause, end, room, and recording migrations.
+- [ ] Expose schedule/start/pause/end/moderation routes with owner authorization.
+- [ ] Test invalid transitions, duplicate starts, stale end, and account suspension.
+
+#### FR-LIVE-03 — Audience visibility
+- [ ] Implement public/follower/subscriber room authorization.
+- [ ] Enforce entitlement and blocking changes while a room is active.
+- [ ] Test public, follower, subscriber, blocked, canceled, expired, and suspended viewers.
+
+#### FR-LIVE-04 — Live chat and moderation
+- [ ] Add durable chat, blocked-word, slow-mode, removal, and moderation migrations.
+- [ ] Implement bounded chat event/replay and idempotent moderation subscribers.
+- [ ] Test blocked words, host removal, rate limits, replay, and late delivery.
+
+#### FR-LIVE-05 — Short-lived credentials
+- [ ] Issue LiveKit publish/viewer credentials bound to stream, actor, role, entitlement, and end state.
+- [ ] Test credential expiry, unauthorized joins, end-time revocation, and replay.
+
+#### FR-LIVE-06 — Recording and VOD
+- [ ] Add opt-in recording, object-key, retention, and VOD visibility migrations.
+- [ ] Inherit original stream visibility unless an explicit creator override is recorded.
+- [ ] Test takedown, expiry, owner deletion, private recording, and archive access.
+
+#### FR-LIVE-07 — Privacy-preserving metrics
+- [ ] Collect asynchronous aggregate stream health/viewer metrics only.
+- [ ] Reject viewer-level PII exports and test duplicate/failed ingestion.
+
+#### Cross-cutting runtime exit for Phase 10
+- [ ] Deploy LiveKit namespace/service/ingress/secrets and verify provider SDK transport.
+- [ ] Attach room, credential, chat, recording, entitlement, and failover runtime evidence.
 
 ## Phase 11 — Notifications and Moderation
 
 - [x] Implement notification preference model
-- [x] Implement RabbitMQ notification queues
-- [x] Implement transactional email templates
-- [x] Implement report/case lifecycle
-- [x] Implement admin moderation dashboard
-- [x] Implement fake/bot account escalation workflows
-- [x] Add worker failure/retry/DLQ tests
+- [x] Implement RabbitMQ notification routing foundation
+- [x] Implement transactional email template routing
+- [x] Implement report/case lifecycle foundation
+- [x] Implement fake/bot escalation and append-only audit foundations
+- [ ] Verify RabbitMQ runtime/DLQ infrastructure
+- [ ] Deploy the production moderation operator UI
 
-Phase 11 note: notification preference enforcement, RabbitMQ notification routing, transactional email template routing, report/case lifecycle, moderator-role dashboard queue, fake/bot escalation, appeal/audit append-only foundations, and worker failure/retry lifecycle coverage are implemented. RabbitMQ runtime/DLQ infrastructure verification and production operator UI/deployment remain pending.
+Phase 11 note: preference, email-template, report/case, escalation, appeal/audit, and subscriber lifecycle foundations exist. Running broker/DLQ verification and production operator UI remain pending.
+
+#### FR-NOTIF-01 / FR-NOTIF-02 — Notification channels and preferences
+- [ ] Add preference, subscription, delivery-log, and push-token migrations.
+- [ ] Implement in-app, push, and email routing with category/channel opt-outs.
+- [ ] Test preference enforcement before publication and at delivery time.
+
+#### FR-NOTIF-03 / FR-NOTIF-05 — Delivery retries and policy
+- [ ] Configure bounded backoff, retry, DLQ, dedupe, and lifecycle idempotency.
+- [ ] Add consumed-event storage and recheck policy during delivery.
+- [ ] Attach RabbitMQ retry/DLQ and duplicate delivery evidence.
+
+#### FR-NOTIF-04 / FR-NOTIF-06 — Transactional email templates
+- [ ] Add template registry and structured parameter contracts for every required email type.
+- [ ] Route domain-event subscribers through the shared email service contract.
+- [ ] Test template parameters, blocked channels, delivery failure, and replay.
+
+#### FR-TRUST-01 / FR-TRUST-02 — Reports
+- [ ] Add report, evidence, duplicate-aggregation, and case migrations.
+- [ ] Validate category/description/evidence and target authorization.
+- [ ] Test duplicate reports, hidden targets, invalid targets, and append-only audit.
+
+#### FR-TRUST-03 / FR-TRUST-04 / FR-TRUST-05 — Case lifecycle and authorization
+- [ ] Implement Open/Triaged/Escalated/Resolved/Appealed states and moderator MFA/RBAC.
+- [ ] Expose moderator queue and resolution routes.
+- [ ] Test unauthorized resolution, invalid transitions, and append-only actor/reason/target events.
+
+#### FR-TRUST-06 / FR-TRUST-07 / FR-TRUST-08 — Appeals and restrictions
+- [ ] Implement appeal pause/restoration policy and independent restrictions.
+- [ ] Keep moderation queue operator-focused and prohibit user-personalized ordering.
+- [ ] Test appeal, restoration, repeated enforcement, and cross-feature restrictions.
+
+#### Cross-cutting runtime exit for Phase 11
+- [ ] Verify RabbitMQ exchanges/queues/retry/DLQ, SMTP/Mailpit, preference, moderation, dashboard, and worker evidence.
 
 ## Phase 12 — Frontend MVP
 
-- [ ] Build authentication and verification screens
-- [ ] Build profile and social graph screens
-- [ ] Build text compose/thread/reply/repost/quote screens
-- [ ] Build photo/video upload and comments
-- [ ] Build chronological feed and story experience
-- [ ] Build subscriptions and Stripe Checkout screens
-- [ ] Build campaign management screen
-- [ ] Build live stream room and chat UI
-- [ ] Build settings/privacy/moderation/account deletion screens
-- [ ] Run accessibility and E2E tests
+- [x] Build Next.js route shells and typed API contracts
+- [x] Add Next 16.4.6 dependencies and strict TypeScript/build foundation
+- [ ] Bind real authenticated API operations to route screens
+- [ ] Implement real auth/session, live room, account export/delete, and E2E flows
 
-## Phase 13 — Production Hardening
+Phase 12 note: route shells, typed contracts, accessibility structure, and a successful production build exist. Real API bindings, live provider UI, account lifecycle confirmations, browser automation, and runtime smoke remain pending.
 
-- [ ] Add deployment probes and pod resource limits
-- [ ] Add backup scripts for PostgreSQL/MongoDB/media metadata
-- [ ] Add Grafana dashboards and Alertmanager rules
-- [ ] Add OpenObserve log parsing and trace correlation
-- [ ] Add data export/delete retention jobs
-- [ ] Add security and dependency scans
-- [ ] Add load and failure testing
-- [ ] Document recovery and rollback
-- [ ] Add production smoke test and release checklist
+#### FR-FE-01 — Web application routes
+- [ ] Bind auth, verification, profile, feed, compose, media, story, subscription, campaign, live, moderation, and settings routes to real API clients.
+- [ ] Add loading/error/empty/auth guards and correlation-ID propagation.
+- [ ] Test routes against a runnable API entrypoint.
+
+#### FR-FE-02 — Responsive content layout
+- [ ] Implement responsive short-video, thread, photo, and live layouts.
+- [ ] Test mobile/tablet/desktop breakpoints and content priority.
+
+#### FR-FE-03 / FR-FE-04 — Entitlements and sponsored disclosure
+- [ ] Render server-authoritative entitlement/paywall state and sponsored/disclosure markers.
+- [ ] Bind Stripe return/cancel and entitlement refresh flows.
+- [ ] Test denied/expired/active/trial paid actions and feed-source explanations.
+
+#### FR-FE-05 — Accessibility
+- [ ] Implement semantic labels, keyboard/focus, reduced motion, media alternatives, contrast, and WCAG 2.2 AA targets.
+- [ ] Add automated accessibility checks and browser evidence.
+
+#### FR-FE-06 — Upload progress
+- [ ] Implement resumable progress, retry, cancel, processing, thumbnail, caption, and alt-text UX.
+- [ ] Test interrupted upload, duplicate completion, processing failure, and READY publication.
+
+#### FR-FE-07 — No engagement optimization
+- [ ] Remove speculative ranking/recommendation UI and expose only permitted feed sources.
+- [ ] Test chronological/following/topic/sponsored source labels.
+
+#### FR-FE-08 — Data export and deletion
+- [ ] Implement export/request and irreversible-delete confirmation flows.
+- [ ] Bind confirmations to server lifecycle states and audit outcomes.
+- [ ] Test cancellation, confirmation, suspension, and completed-deletion behavior.
+
+#### Cross-cutting runtime exit for Phase 12
+- [ ] Run Next.js strict typecheck/build/start, Playwright/Cypress E2E, accessibility, and API smoke evidence.
+
+## Phase 13 — Startup, DevOps, IaC, Secrets, and Production Hardening
+
+- [ ] Add runnable NestJS, Spring, worker, web, and migration entrypoints with dependency health waits and graceful shutdown.
+- [ ] Add forward-only migration preflight jobs that block incompatible schema rollout.
+- [ ] Add Terraform or equivalent IaC for DNS, namespaces, PVC claims, service accounts, network policies, ingress, and secret references.
+- [ ] Add Helm/plain-manifest releases for API, Spring, web, workers, databases, broker, cache, storage, LiveKit, observability, and secrets.
+- [ ] Add environment overlays for local/dev/production with no duplicate credentials.
+- [ ] Add Infisical/Kubernetes secret references and startup fail-fast secret validation.
+- [ ] Add immutable image build/digest, image signing, SBOM, SAST/secret/SCA/container/IaC/license gates.
+- [ ] Add namespace RBAC, workload service accounts, network policies, non-root limits, and read-only runtime controls.
+- [ ] Add liveness/readiness/startup probes, resources, PDB, rolling update, and rollout wait/rollback.
+- [ ] Add PostgreSQL/MongoDB/object-storage backup, restore, integrity, lifecycle, orphan cleanup, and retention procedures.
+- [ ] Add outbox replay, RabbitMQ DLQ replay, Redis recovery, and migration rollback runbooks.
+- [ ] Add Prometheus/Grafana/OpenObserve metrics, dashboards, alerts, structured logs, traces, PII redaction, and correlation IDs.
+- [ ] Add load/failure tests for API, media, stories, notifications, outbox, live, and data recovery.
+- [ ] Add protected GitLab deployment smoke, public-route smoke, Stripe smoke, broker/worker smoke, and mobile build hooks.
+
+#### Cross-cutting runtime exit for Phase 13
+- [ ] Verify API, Spring, workers, web, databases, broker, cache, storage, LiveKit, and observability start locally and on k3s.
+- [ ] Attach migration, health, secret, deployment, security scan, backup/restore, rollback, smoke, and recovery evidence.
+- [ ] Add commit SHA, environment, date, commands, logs, and artifact links to `CHANGELOG.md`.
+
+## Phase 14 — Expo and NativeWind Mobile App
+
+- [ ] Scaffold Expo TypeScript workspace in `apps/mobile` with Expo Router.
+- [ ] Configure EAS, app identifiers, schemes, deep links, Android/iOS variants, icons, splash, status bar, and safe areas.
+- [ ] Configure NativeWind design tokens and accessibility defaults.
+- [ ] Implement typed API client, secure session storage, refresh rotation, logout, and route guards.
+- [ ] Implement authentication, verification, profile/social, feed, compose, media, stories, subscriptions, campaigns, live, notifications, moderation, export, and deletion flows.
+- [ ] Implement offline-safe cache and noncritical action queue only; never queue entitlement/billing decisions.
+- [ ] Add Android/iOS unit/component/E2E/accessibility/build evidence.
+
+#### Cross-cutting runtime exit for Phase 14
+- [ ] Attach strict TypeScript, lint, Expo prebuild, Android/iOS build, API contract, auth, media, billing, live, push, deep-link, offline, and E2E evidence.
+
+## Runtime Completion Gate
+
+No implementation checkbox is runtime-complete until source, migrations, runnable entrypoints, real dependency startup, HTTP/API, event/outbox, security, operations, frontend/mobile, and attached evidence all exist. Unit/build success alone is not runtime verification.
 
 ## Final Definition of Done
 
-No phase is complete until code, migrations, tests, RBAC, resource limits, docs, and deployment evidence exist. Each AI session should implement only the current phase and leave a resume-ready summary in `CHANGELOG.md`.
+No phase is complete until code, migrations, typed contracts, runnable entrypoints, tests, RBAC, resource limits, docs, and deployment evidence exist. Every AI session must implement only the current approved phase and append verification evidence to `CHANGELOG.md`.
 
 Cross-phase type gate:
 
-- TypeScript and Python deltas must satisfy explicit typing rules from NFR-22 and section 12 rules.
-- Any phase checklist item that introduces or modifies contracts/domain logic is blocked until type checks pass.
+- TypeScript and Python deltas must satisfy strict typing rules from NFR-22.
+- Java phases require successful Maven/test/type evidence when a Java runtime is available.
+- Expo mobile phases require Android/iOS build evidence and no unresolved runtime dependencies.

@@ -90,13 +90,15 @@ Every `PROJECT.md` uses this numbered structure:
 - Cover the full lifecycle: creation, reads, updates, deletion, edge cases, error conditions
 - Email notifications get their own subsection with a numbered template per email type
 
-**Key areas to always cover**:
-- Core entities: CRUD, lifecycle state machine, status transitions
-- Async operations (if any): what triggers them, what they produce
-- Idempotency: how repeated operations are deduplicated
-- Authentication & authorization: who can access what
-- Frontend pages (if applicable): each route/page as its own FR
-- Scheduled/background jobs (if any): triggers, behavior, idempotency
+**Mandatory comprehensiveness**:
+- Every FR must participate in a one-to-many trace: one functional requirement may decompose into many implementation specifications across data, services, APIs, events, UI, infrastructure, tests, and runtime evidence.
+- Every FR must describe the complete behavior, not only its happy path. Include fields, validation, authorization, state transitions, idempotency, persistence, events, retry/failure behavior, security, observability, and user-visible outcomes.
+- Cover creation, retrieval, update, deletion, pagination/filtering, duplicate operations, cancellation, expiry, suspension, restoration, refunds/compensation, and alternate/forbidden paths where applicable.
+- Separate transport contracts from domain rules. An FR must not hide business logic in controllers, handlers, workers, schedulers, or frontend code.
+- Specify which API routes, typed contracts, migrations, repositories, services, outbox/event records, queue exchanges/queues/DLQs, scheduled jobs, secret groups, UI routes/screens, and deployment resources a requirement introduces or modifies.
+- Specify testable acceptance criteria and executable evidence. Use a requirement-specific runtime acceptance subsection or equivalent checklist so unit success does not imply database, broker, HTTP, frontend, mobile, or infrastructure readiness.
+- Mark implementation status honestly: distinguish source-implemented, migration-added, scaffolded, unit-verified, integration-verified, runtime-verified, and pending.
+- Do not mark a requirement complete solely because source files or route shells exist. Completion requires runnable entrypoints, real dependencies where applicable, passing tests, and attached verification evidence.
 
 ---
 
@@ -116,6 +118,16 @@ Every `PROJECT.md` uses this numbered structure:
 - `NFR-07` — Observability (structured JSON logs, no silent failures)
 - `NFR-08` — Security (no secrets in code, Secrets Manager, least-privilege IAM)
 - `NFR-09` — **Service Layer Supremacy**: define and enforce the architectural rule that all business logic lives in `src/service/` only
+
+**Mandatory NFR granularity**:
+- Expand each cross-cutting NFR into measurable, testable policy: target, limits, thresholds, failure behavior, retry/DLQ policy, retention, security boundary, observability, and acceptance evidence.
+- Include startup and shutdown behavior, health probes, dependency readiness, migrations, schema compatibility, secret validation, resource limits, graceful degradation, backup/restore, rollback, and environment parity.
+- Include idempotency, deduplication, replay, at-least-once delivery, duplicate protection, transaction boundaries, and outbox behavior for every async workflow.
+- Include authentication, authorization, RBAC, least privilege, network policy, secret rotation, PII handling, audit retention, secure defaults, and no-direct-database rules for workers and transport adapters.
+- Include type safety, lint/build gates, migration discipline, API/contract compatibility, accessibility, responsive behavior, browser/mobile runtime, and infrastructure policy.
+- Include DevOps/IaC, image signing/SBOM, vulnerability/scanning gates, protected deployments, immutable image references, observability, capacity, cost controls, disaster recovery, and release rollback.
+- Define which NFRs apply to local, dev, staging, and production environments and where behavior deliberately differs.
+- Convert NFR statements into implementation tasks and verification evidence; an NFR is not complete until automated or runtime validation demonstrates its measurable policy.
 
 ---
 
@@ -271,6 +283,31 @@ Every `PROJECT.md` uses this numbered structure:
 
 **Format**: Numbered phases as `### Phase N — Name`. Each phase contains a checklist `- [ ] task`.
 
+**Mandatory implementation-plan granularity**:
+- Structure feature phases with a one-to-many Functional Requirement (FR) to specification relationship: each FR is a named parent under the phase, and each parent contains multiple concrete specs/checklist items.
+- Use this pattern:
+  ```markdown
+  #### FR-XXX-01 — Requirement Name
+  - [ ] Data/migration specification
+  - [ ] Domain/service specification
+  - [ ] API/typed-contract specification
+  - [ ] Authorization/idempotency/event specification
+  - [ ] UI/client specification, if applicable
+  - [ ] Unit/integration/runtime acceptance specification
+  ```
+- One FR may contain many specs, but every spec must trace to an FR. Add a final cross-cutting phase-exit checklist only for startup, infrastructure, shared observability, and evidence that is not naturally owned by one FR.
+- For combined requirements, use `FR-XXX-01 / FR-XXX-02 — Shared lifecycle` and retain the individual FRs in Section 2. Do not merge unrelated requirements solely for brevity.
+- Keep broad prose phases from replacing specs. Each implementation item must identify a migration, route, contract, service, repository, event, UI behavior, worker, infrastructure resource, secret, test, or runtime evidence artifact.
+- Add a phase note and status ledger after the checklist. A phase note may summarize source/scaffold status, but unchecked specs remain pending until runtime evidence exists.
+- Cover every layer needed for a fully working system: scaffold, domain/data model, migrations, service logic, typed contracts, dispatch/API entrypoints, async consumers/publishers, infrastructure, secrets, workers, frontend, mobile, observability, security, backup/restore, CI/CD, and runtime verification.
+- Give every feature phase a domain/data subsection, HTTP/API subsection, async/outbox subsection if applicable, worker boundary subsection if applicable, migration subsection, UI subsection, testing subsection, and phase exit evidence.
+- Include dedicated startup and infrastructure work rather than assuming infrastructure is implicit. Specify runnable entrypoints, health probes, graceful shutdown, dependency wait/readiness, migration preflight, secret fail-fast validation, deployment resources, and environment parity.
+- Include DevOps/IaC/secrets as one or more explicit phases where applicable, covering Terraform/Helm/manifests, environment overlays, migration jobs, immutable artifacts, scan/SBOM gates, network policy, observability, backups, recovery, and rollback.
+- Add a cross-cutting Runtime Completion Gate requiring source, migrations, entrypoints, real dependency startup, event/outbox behavior, security, operations, frontend/mobile, and attached evidence before completion.
+- Maintain an implementation-status ledger. Never convert source, migration, or unit success into runtime-complete status without live HTTP/database/broker/infrastructure evidence.
+- Add Phase exit evidence after each major phase: exact commands, passing test/build output, runtime logs, endpoints exercised, environment, commit SHA, date, and relevant artifacts.
+- Add extra phases instead of hiding broad requirements under generic "hardening," "wiring," or "frontend" phases.
+
 **Standard phase sequence**:
 
 - **Phase 0 — Project Scaffold**: repo init, docker-compose, Prisma setup, Terraform bootstrap, `.env.example`, `CLAUDE.md`, `PROJECT.md`, CI skeleton.
@@ -413,8 +450,8 @@ When scaffolding a new project from an idea, work through these in order:
 
 - [ ] Name the project and define the core domain problem
 - [ ] Write Section 1 (Overview) — entities, flow, identity
-- [ ] Write Section 2 (Functional Requirements) — enumerate all FRs by domain
-- [ ] Write Section 3 (NFRs) — fill in standard NFRs, adjust for domain
+- [ ] Write Section 2 (Functional Requirements) — enumerate all FRs by domain, complete lifecycle, failure paths, contracts, persistence, events, UI, tests, and runtime acceptance
+- [ ] Write Section 3 (NFRs) — specify measurable limits, startup/shutdown, security, observability, recovery, delivery, environment parity, and executable evidence
 - [ ] Write Section 4 (Architecture) — ASCII diagrams for prod + portfolio + async flows
 - [ ] Write Section 5 (AWS Resources) — every resource, Lambda config, SQS config, IAM
 - [ ] Write Section 6 (Software Design) — repo structure + ServiceAction type + tech stack
@@ -422,7 +459,7 @@ When scaffolding a new project from an idea, work through these in order:
 - [ ] Write Section 8 (API Docs) — all endpoints, error codes
 - [ ] Write Section 9 (DevOps) — CI/CD pipeline, build commands
 - [ ] Write Section 10 (Local Dev) — docker-compose, env vars, curl examples
-- [ ] Write Section 11 (Implementation Plan) — phased checklist working backwards from done
+- [ ] Write Section 11 (Implementation Plan) — phased checklist working backwards from done, with every feature phase grouped by FR parent and many concrete implementation specs per FR
 - [ ] Write Section 12 (Project Rules) — AI guardrails
 - [ ] Write Section 13 (Cost Estimates) — portfolio vs. production tables
 - [ ] Write Section 14 (Testing Plan) — unit, integration, e2e strategy
@@ -438,5 +475,10 @@ A well-written `PROJECT.md` should be comprehensive enough that:
 2. An AI coding assistant can generate any Lambda handler, service function, or DB migration without asking clarifying questions.
 3. A Terraform engineer can provision the full cloud infrastructure from Section 5 alone.
 4. A QA engineer can write integration tests from Section 8 (API docs) alone.
+5. Every functional and non-functional requirement has enough lifecycle, boundary, failure, security, observability, test, and runtime detail to produce executable implementation and acceptance tasks.
+6. Every implementation phase has domain, data/migration, API/service, async, infrastructure, startup, UI/mobile, test, and exit-evidence coverage where applicable.
+7. Source, migrations, route shells, unit tests, and infrastructure declarations are never conflated with runtime-complete or production-ready status.
+8. DevOps, IaC, secrets, startup, health, rollback, backup/restore, and recovery are specified as implementation work rather than left implicit.
+9. A completion gate or implementation-status ledger distinguishes source-implemented, migration-added, scaffolded, unit-verified, integration-verified, runtime-verified, and pending work.
 
-If any of these four conditions aren't met, the document isn't done.
+If any of these conditions isn't met, the document isn't done.
