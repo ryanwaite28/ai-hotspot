@@ -1549,14 +1549,15 @@ Phase 8 note: creator-tier CRUD, Connect onboarding/payout status foundation, cr
 
 ## Phase 9 — Marketing and Ads
 
-- [ ] Implement campaign model and policy states
-- [ ] Implement entitlement gate and paid-feature trial gate
-- [ ] Implement campaign budget and placement validation
-- [ ] Implement aggregate metrics and reporting
-- [ ] Implement clearly labeled sponsor placement
-- [ ] Implement ad policy/moderation review
-- [ ] Prohibit sensitive and PII targeting
-- [ ] Add campaign tests
+- [x] Implement campaign model and policy states
+- [x] Implement entitlement gate and paid-feature trial gate
+- [x] Implement campaign budget and placement validation
+- [x] Implement aggregate metrics and reporting
+- [x] Implement clearly labeled sponsor placement metadata
+- [x] Prohibit sensitive and PII targeting
+- [x] Add campaign tests
+
+Phase 9 note: campaign contracts, draft/review/approval/status lifecycle, paid/trial entitlement gates, budget/schedule/HTTPS placement validation, aggregate metrics contracts, clearly labeled sponsored placement metadata, and sensitive/PII targeting prohibition are implemented. External ad billing, real aggregate ingestion/reporting persistence, and moderation-review operator workflow remain pending.
 
 ## Phase 10 — Live Streaming
 

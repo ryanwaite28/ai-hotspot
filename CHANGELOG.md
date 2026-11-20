@@ -1,5 +1,27 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Phase 9 campaign foundation
+
+### Completed
+
+- Added typed campaign model, objective, placement, status, and aggregate metrics contracts.
+- Added campaign draft/review/status lifecycle service and outbox-backed SQL repository foundation.
+- Added paid-platform/trial entitlement gate for paid campaign creation.
+- Added budget, schedule, currency, HTTPS creative/destination, and category validation.
+- Added clearly labeled sponsor placement metadata and prohibited sensitive/PII targeting by contract scope.
+- Added unit coverage for entitlement denial and campaign validation lifecycle.
+
+### Verification evidence
+
+- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/campaigns/campaigns.service.test.ts`
+- Result: 2 passed, 0 failed.
+
+### Pending
+
+- External ad billing/payment integration
+- Real aggregate metric ingestion/reporting persistence
+- Ad policy/moderation operator review workflow
+
 ## 2026-11-20 — Phase 8 creator-tier CRUD foundation
 
 ### Completed
@@ -917,7 +939,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 - Re-reviewed Phase 1 implementation checklist against current code artifacts before any Phase 2 start.
 - Corrected Phase 1 checklist status in `PROJECT.md` for auth mutation outbox coverage:
-	- Marked the full mutation-item as incomplete because only `user.created` and `user.email-reset_requested` are currently scaffolded.
+	- Marked the full mutation-item as incomplete because only `user.created` and `user.email_reset_requested` are currently scaffolded.
 - Updated Phase 1 note text to explicitly state current event coverage and remaining gaps.
 
 ### Outcome

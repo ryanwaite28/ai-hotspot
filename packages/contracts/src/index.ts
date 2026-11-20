@@ -6,3 +6,4 @@ export * from './media-contracts';
 export * from './post-contracts';
 export * from './social-contracts';
 export * from './story-contracts';
+export * from './campaign-contracts';
