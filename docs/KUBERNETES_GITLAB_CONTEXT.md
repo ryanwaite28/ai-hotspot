@@ -14,8 +14,8 @@ before writing your `.gitlab-ci.yml` or Kubernetes manifests.
 
 | | |
 |---|---|
-| Distro | k3s (single control-plane node, `elitedesk-800`) |
-| Capacity | 4 vCPU / ~24 GiB RAM — **this is the entire cluster**, not per-node |
+| Distro | k3s — two nodes: control plane `elitedesk-800` + storage-dedicated agent `optiplex` (see [§1.1](#11-node-roles-and-scheduling)) |
+| Capacity | `elitedesk-800`: 4 vCPU / ~24 GiB RAM (all app/stateless workloads). `optiplex`: 4 vCPU / ~15 GiB RAM (**stateful storage workloads only**). Plan app capacity against `elitedesk-800` alone. |
 | Ingress controller | standalone `ingress-nginx`, class name **`nginx-external`** (default) |
 | Storage class | `local-path` (Rancher local-path-provisioner, default, `WaitForFirstConsumer`, **ReadWriteOnce only**) |
 | DNS / domain | `rmwhs.com`, proxied through Cloudflare |
@@ -24,9 +24,63 @@ before writing your `.gitlab-ci.yml` or Kubernetes manifests.
 | Runners | GitLab Runner (Helm chart, `kubernetes` executor) in the `gitlab-runner` namespace, deployed via [helm/gitlab-runner-values.helm.yaml](k8s-infrastructure/helm/gitlab-runner-values.helm.yaml) |
 | Cluster admin UI | Headlamp at `https://headlamp.rmwhs.com/`, OIDC via GitLab |
 
-Because this is a **single node with fixed, small capacity**, every
-requirement and best practice below exists to keep the cluster stable under
-that ceiling, not because of arbitrary policy.
+Because each node has **fixed, small capacity** and there is no spare node
+to fail over to, every requirement and best practice below exists to keep
+the cluster stable under that ceiling, not because of arbitrary policy.
+
+### 1.1 Node roles and scheduling
+
+| Node | Role | Labels | Taints | Runs |
+|---|---|---|---|---|
+| `elitedesk-800` | control plane + general compute | `node-role.kubernetes.io/control-plane=true` | none | GitLab, runner, ingress, monitoring, app Deployments, workers — everything stateless |
+| `optiplex` | **storage-dedicated** agent | `node-role.kubernetes.io/storage=true`, `dedicated=storage` | `dedicated=storage:NoSchedule` | database pods (PostgreSQL, MongoDB), Redis/cache pods, object storage pods (MinIO) — and nothing else |
+
+The taint keeps ordinary pods off `optiplex`. Cluster-wide DaemonSets that
+tolerate all taints (node-exporter, OpenObserve collector) still run there,
+which is intended. The taint is `NoSchedule`, not `NoExecute`, so pods
+already running there were not evicted when the taint was added.
+
+**Storage workloads must opt in with both a toleration and a node
+selector.** The toleration only *permits* scheduling on `optiplex`. The
+node selector is what *pins* the pod there:
+
+```yaml
+spec:
+  template:
+    spec:
+      nodeSelector:
+        dedicated: storage
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: storage
+          effect: NoSchedule
+```
+
+Rules:
+- Only stateful data stores (databases, caches, object storage) get this
+  stanza. App servers, workers, gateways, and jobs must **not** tolerate
+  the `dedicated=storage` taint.
+- Add the stanza **before the first deploy** of a stateful workload.
+  `local-path` PVCs are `WaitForFirstConsumer`: the PV is created on the
+  node where the first pod lands, and the pod stays tied to that node for
+  good. If a database starts once on `elitedesk-800`, its PVC is stuck
+  there. Moving it means backup, delete the PVC, then restore.
+- `local-path` data for storage pods lives on `optiplex`'s disk
+  (`/var/lib/rancher/k3s/storage`). Backups must reach it there.
+- Storage pods still declare requests and limits (§2.5). Budget them
+  against `optiplex`'s ~15 GiB, not against the control-plane node.
+- Pre-existing stateful infrastructure (GitLab's bundled data, Infisical's
+  PostgreSQL/Redis) still runs on `elitedesk-800` with PVCs bound there. It
+  stays there until someone migrates it on purpose.
+
+To reproduce or audit the node setup:
+
+```bash
+kubectl label node optiplex node-role.kubernetes.io/storage=true dedicated=storage --overwrite
+kubectl taint node optiplex dedicated=storage:NoSchedule --overwrite
+kubectl get node optiplex -o jsonpath='{.spec.taints}'
+```
 
 ---
 
@@ -74,9 +128,10 @@ treated as broken, not "good enough."
 
 ### 2.5 Every container declares resource requests and limits
 - No container may run without explicit `resources.requests` and
-  `resources.limits` for both `cpu` and `memory`. On a 4-core/24GiB
-  single-node cluster, one unbounded pod can starve everything else,
-  including GitLab itself.
+  `resources.limits` for both `cpu` and `memory`. All app workloads share
+  the single 4-core/24GiB `elitedesk-800` node, so one unbounded pod can
+  starve everything else, including GitLab itself. On `optiplex`, one
+  unbounded database can starve every other data store.
 - Start conservative (e.g. `100m`/`128Mi` requests) and raise only if you
   observe throttling/OOM for that specific workload.
 
@@ -96,9 +151,9 @@ treated as broken, not "good enough."
 ## 3. Best Practices
 
 ### 3.1 Be resource-efficient by default
-- Prefer `replicas: 1` unless you have a concrete reason for more — this
-  cluster has one node, so extra replicas don't buy you failover, only
-  more resource pressure.
+- Prefer `replicas: 1` unless you have a concrete reason for more. Every
+  stateless workload runs on the one general-compute node, so extra
+  replicas don't buy you failover, only more resource pressure.
 - Prefer small base images (`alpine`, `distroless`, slim variants) to keep
   image pulls and disk usage down on `local-path` storage.
 - Set `readinessProbe`/`livenessProbe` on anything long-running so a stuck
@@ -169,10 +224,12 @@ Deployment manifest never contains a literal secret value — only a
   ```
 
 ### 3.6 Storage caveats
-- `local-path` is `ReadWriteOnce` and `WaitForFirstConsumer` only — no
-  shared/multi-pod volumes, and a PVC binds to whatever node the first pod
-  lands on (fine here since there's only one node, but don't assume this
-  generalizes if the cluster ever grows).
+- `local-path` is `ReadWriteOnce` and `WaitForFirstConsumer` only. There
+  are no shared/multi-pod volumes, and a PVC binds **permanently** to
+  whichever node its first pod lands on. Now that there are two nodes,
+  this matters: databases, caches, and object storage must carry the
+  `optiplex` nodeSelector + toleration from §1.1 on their first deploy.
+  Any other PVC-backed workload ends up on `elitedesk-800`.
 - Don't request persistent storage for anything that can be stateless.
   Reach for a PVC only when the app genuinely needs to persist data across
   restarts.
@@ -314,8 +371,12 @@ prerequisites, not something to work around per-project:
   HTTP directly.
 - **No shared/RWX storage** — anything needing multi-pod shared storage
   isn't currently supported.
-- **Single node, no HA** — a node reboot/failure takes down everything,
-  including GitLab and the registry. There is no failover.
+- **No HA** — the two nodes have separate roles; neither is a standby for
+  the other. If `elitedesk-800` reboots or fails, the control plane,
+  GitLab, the registry, ingress, and every app go down. If `optiplex`
+  reboots or fails, every app database, cache, and object store pinned
+  there goes down. Their `local-path` PVs can't be rescheduled elsewhere.
+  There is no failover in either direction.
 
 ---
 
@@ -356,6 +417,9 @@ already covers most SDLC security controls.
       the runner's own SA, not cluster-admin)
 - [ ] `resources.requests` and `resources.limits` set on every container
 - [ ] `readinessProbe`/`livenessProbe` configured
+- [ ] Databases/caches/object storage carry the `dedicated: storage`
+      nodeSelector + `dedicated=storage:NoSchedule` toleration (§1.1)
+      **before first deploy**; stateless workloads carry neither
 - [ ] Ingress uses `ingressClassName: nginx-external`, a unique
       `<app>.rmwhs.com` subdomain, and `ssl-redirect: "false"`
 - [ ] No apex-domain binding, no `privileged: true`, no secrets committed

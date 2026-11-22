@@ -71,7 +71,7 @@ npm run stripe:listen
 - Production: k3s namespace `hotspot`; public web `hotspot.rmwhs.com`; public API `api.hotspot.rmwhs.com`.
 - Existing cluster services: GitLab, Infisical, RabbitMQ, Prometheus, Grafana, OpenObserve, Mailpit, and the `nginx-external` ingress controller.
 - Runtime values come from Kubernetes Secrets or Infisical references. Never copy secret values into files or logs.
-- HotSpot is a single-node/limited-resource workload. Keep replicas at one unless a phase has demonstrated the need for more.
+- HotSpot is a limited-resource workload on a two-node cluster: `elitedesk-800` (control plane, all stateless workloads) and `optiplex` (storage-dedicated, taint `dedicated=storage:NoSchedule`). Keep replicas at one unless a phase has demonstrated the need for more.
 
 ## K3s Deployment Rules
 
@@ -79,6 +79,7 @@ npm run stripe:listen
 - Ingress hosts: production uses subdomains of `rmwhs.com`; dev uses `rmwhs-dev.space`/`*.rmwhs-dev.space` with single-label subdomains only; never bind either apex domain
 - Plain HTTP origin: `ssl-redirect: "false"`; Cloudflare terminates public TLS
 - Storage: `local-path`, ReadWriteOnce only
+- Node placement: PostgreSQL, MongoDB, Redis, and MinIO set `nodeSelector: {dedicated: storage}` plus a toleration for `dedicated=storage:NoSchedule`, present on first deploy (local-path PVCs bind to the first node a pod lands on). Every other workload must not tolerate that taint. See `PROJECT.md` §5.6.1.
 - CI: GitLab plus kaniko/buildah
 - Images: immutable `$CI_COMMIT_SHORT_SHA` tags, never `:latest`
 - Every container: CPU/memory requests and limits plus readiness/liveness probes

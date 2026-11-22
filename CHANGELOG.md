@@ -1,5 +1,30 @@
 # HotSpot Changelog
 
+## 2026-11-22 — Cluster update: `optiplex` storage-dedicated node
+
+### Completed
+
+- Labeled k3s agent node `optiplex` with `node-role.kubernetes.io/storage=true` and `dedicated=storage`, and tainted it `dedicated=storage:NoSchedule`, so it hosts only data stores (databases, Redis, object storage).
+- Updated `docs/KUBERNETES_GITLAB_CONTEXT.md`: two-node topology, new §1.1 on node roles and scheduling (toleration + nodeSelector stanza, the first-deploy PVC-binding warning), and revised capacity, storage, HA, and onboarding-checklist text.
+- Updated `PROJECT.md`, which the user explicitly requested. Rationale: the cluster gained a second node set aside for stateful storage, and the spec's single-node assumptions no longer hold. Changed: the §1.5 cluster row, NFR-12 per-node capacity, the §4.3 placement diagram and compute row, §5.1 cluster facts, the new §5.6.1 Node Placement, the §5.9.2 CDN rationale, the §9.7 deploy checklist, and the Phase 13 release item.
+- Updated `CLAUDE.md` environment notes and K3s deployment rules with the node-placement rule.
+
+### Verification evidence
+
+- `kubectl get node optiplex -o jsonpath='{.spec.taints}'` → `[{"effect":"NoSchedule","key":"dedicated","value":"storage"}]`
+- `optiplex` capacity: 4 vCPU / 15728652Ki memory. `elitedesk-800`: 4 vCPU / 23957108Ki.
+- The existing pods on `optiplex` were all DaemonSet pods (node-exporter, OpenObserve collector, svclb for Infisical ingress) and kept running. The taint is NoSchedule, not NoExecute.
+
+### Unresolved
+
+- The `svclb-infisical-ingress-nginx-controller` DaemonSet does not tolerate `dedicated`. Its existing pod on `optiplex` stays, but if that pod is recreated it won't come back on that node. Accept this, or add a toleration to the svclb if the Infisical LoadBalancer has to answer on `optiplex`'s IP.
+- No HotSpot data-store manifests exist in `k8s/` yet. Phase 13 must add the `optiplex` nodeSelector/toleration (`PROJECT.md` §5.6.1) when PostgreSQL/MongoDB/Redis/MinIO releases are created.
+- Existing infrastructure data stores (Infisical PostgreSQL/Redis, GitLab data) remain on `elitedesk-800`. Migrating them is optional and out of scope.
+
+### Next
+
+- No phase change. Resume at the previously recorded next phase.
+
 ## 2026-11-20 — Copilot session steering mechanism
 
 ### Completed

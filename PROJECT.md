@@ -128,7 +128,7 @@ STRIPE
 | Environments | `local`, `dev`, `production` |
 | Resource prefix | `hotspot` |
 | Email sender | `noreply@rmwhs.com` |
-| Primary cluster | k3s single-node cluster at `elitedesk-800` |
+| Primary cluster | k3s cluster: control plane `elitedesk-800` (app compute) + storage-dedicated agent `optiplex` (databases, cache, object storage) |
 
 ## 1.6 Mission
 
@@ -292,7 +292,7 @@ HotSpot demonstrates an ethically scoped, verifiable, deployable social platform
 - **NFR-09** — Service-layer supremacy: all business decisions live in typed service modules. API/workers only parse input, call services, and map outputs.
 - **NFR-10** — Privacy: data collection is purpose-limited, retention-bounded, and exportable/deletable.
 - **NFR-11** — Availability: a pod restart must not lose durable work or grant entitlement twice.
-- **NFR-12** — Capacity: workloads must respect the cluster's 4 vCPU/24 GiB ceiling and declare requests and limits.
+- **NFR-12** — Capacity: workloads must declare requests and limits and respect their node's ceiling. Stateless app workloads must fit `elitedesk-800` (4 vCPU / ~24 GiB). Stateful data stores (PostgreSQL, MongoDB, Redis, object storage) must fit the storage-dedicated `optiplex` node (4 vCPU / ~15 GiB).
 - **NFR-13** — Immutable state: post edit history, payments, moderation actions, and entitlement grants append durable audit records.
 - **NFR-14** — Data boundaries: raw identity evidence is not stored in HotSpot databases or object storage.
 - **NFR-15** — Open APIs: HTTP APIs use versioned, documented, typed contracts and cursor pagination.
@@ -382,18 +382,18 @@ Observability
 Internet
   → Cloudflare DNS / edge
   → nginx-external ingress
-  → one replica services
-  → PostgreSQL pod/PVC
-  → Redis pod
-  → RabbitMQ pod
-  → object storage pod/PVC (MinIO or Longhorn-backed)
-  → MongoDB pod/PVC for media/chat hot metadata
-  → LiveKit pod or external WebRTC relay
+  → one replica services                         [elitedesk-800]
+  → RabbitMQ pod (existing shared broker)        [elitedesk-800]
+  → LiveKit pod or external WebRTC relay         [elitedesk-800]
+  → PostgreSQL pod/PVC                           [optiplex, storage-dedicated]
+  → Redis pod                                    [optiplex, storage-dedicated]
+  → object storage pod/PVC (MinIO)               [optiplex, storage-dedicated]
+  → MongoDB pod/PVC for media/chat hot metadata  [optiplex, storage-dedicated]
 ```
 
 | Concern | Home Server | Larger Production |
 |---|---|---|
-| Compute | 4 vCPU single node | Multi-node Kubernetes |
+| Compute | 4 vCPU app node (`elitedesk-800`) + 4 vCPU storage-dedicated node (`optiplex`) | Multi-node Kubernetes |
 | Database | Dedicated PostgreSQL single instance | Managed PostgreSQL Multi-AZ |
 | Object storage | S3-compatible in-cluster storage | Managed object storage/CDN |
 | Cache | Redis single instance | Redis cluster |
@@ -486,10 +486,10 @@ Docker Compose
 
 | Item | Verified Value |
 |---|---|
-| Distro | k3s single control plane |
-| Node | `elitedesk-800` |
-| Capacity | 4 vCPU / approximately 24 GiB RAM |
-| Storage | `local-path`, ReadWriteOnce, WaitForFirstConsumer |
+| Distro | k3s single control plane, two nodes |
+| Nodes | `elitedesk-800` (control plane + all stateless app workloads); `optiplex` (agent, storage-dedicated: labels `node-role.kubernetes.io/storage=true`, `dedicated=storage`; taint `dedicated=storage:NoSchedule`) |
+| Capacity | `elitedesk-800`: 4 vCPU / approximately 24 GiB RAM; `optiplex`: 4 vCPU / approximately 15 GiB RAM |
+| Storage | `local-path`, ReadWriteOnce, WaitForFirstConsumer (PVs bind permanently to the node of the first pod) |
 | Ingress | standalone nginx, class `nginx-external` |
 | DNS/TLS | Cloudflare proxied hostnames; ingress plain HTTP; `ssl-redirect: false` |
 | RabbitMQ | namespace `rabbitmq`, service `rabbitmq.rabbitmq.svc.cluster.local:5672`, management `15672` |
@@ -580,6 +580,23 @@ Each workload declares:
 - readiness/liveness probes
 - CPU/memory requests and limits
 - `PodDisruptionBudget` only after replica counts justify it
+- node placement per §5.6.1
+
+### 5.6.1 Node Placement
+
+`optiplex` runs only HotSpot's stateful data stores: PostgreSQL, MongoDB, Redis, and MinIO object storage. Each of those StatefulSets declares:
+
+```yaml
+nodeSelector:
+  dedicated: storage
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: storage
+    effect: NoSchedule
+```
+
+Everything else runs on `elitedesk-800` and must not tolerate the `dedicated=storage` taint: NestJS gateway/services, Spring, web, Python/Node workers, media caching gateway, LiveKit, migration jobs, and the shared RabbitMQ. The stanza must be present on a data store's first deploy, because `local-path` binds the PVC to whichever node the first pod lands on. Backup/restore procedures (Phase 13) operate on volumes stored on `optiplex`. If `optiplex` goes down, all HotSpot data stores go down; app pods must fail readiness rather than crash-loop or lose durable work (NFR-11).
 
 The application uses `nginx-external` and `ssl-redirect: false`. Cloudflare handles public TLS. The production hostnames are `hotspot.rmwhs.com` and `api.hotspot.rmwhs.com`. Dev hostnames use `rmwhs-dev.space` and must not use deep subdomains.
 
@@ -622,7 +639,7 @@ Decision summary:
 ### 5.9.2 Rationale
 
 - Satisfies NFR-03 cost efficiency by adding minimal operational overhead and avoiding managed CDN dependencies.
-- Respects NFR-12 capacity limits on the 4 vCPU single-node cluster by avoiding early CPU-heavy transform tiers.
+- Respects NFR-12 capacity limits on the 4 vCPU app node (`elitedesk-800`) by avoiding early CPU-heavy transform tiers. The caching gateway is stateless and runs there; the MinIO origin runs on the storage-dedicated `optiplex` node.
 - Preserves NFR-05 local parity: object storage plus caching gateway behavior can be reproduced in Docker Compose and k3s.
 - Fits media architecture flow: derivatives are produced by media workers and then cached as immutable public assets.
 
@@ -1287,6 +1304,7 @@ The repository must expose:
 - [ ] no `:latest` image
 - [ ] Secret references verified
 - [ ] resource requests/limits present
+- [ ] data stores pinned to `optiplex` (nodeSelector + toleration) and stateless workloads not tolerating `dedicated=storage`
 - [ ] readiness/liveness probes present
 - [ ] ingress class `nginx-external`
 - [ ] Cloudflare proxied DNS configured
@@ -2022,7 +2040,7 @@ Phase 12 note: route shells, typed contracts, accessibility structure, and a suc
 - [ ] Add runnable NestJS, Spring, worker, web, and migration entrypoints with dependency health waits and graceful shutdown.
 - [ ] Add forward-only migration preflight jobs that block incompatible schema rollout.
 - [ ] Add Terraform or equivalent IaC for DNS, namespaces, PVC claims, service accounts, network policies, ingress, and secret references.
-- [ ] Add Helm/plain-manifest releases for API, Spring, web, workers, databases, broker, cache, storage, LiveKit, observability, and secrets.
+- [ ] Add Helm/plain-manifest releases for API, Spring, web, workers, databases, broker, cache, storage, LiveKit, observability, and secrets. PostgreSQL, MongoDB, Redis, and MinIO releases carry the `optiplex` nodeSelector/toleration (§5.6.1).
 - [ ] Add environment overlays for local/dev/production with no duplicate credentials.
 - [ ] Add Infisical/Kubernetes secret references and startup fail-fast secret validation.
 - [ ] Add immutable image build/digest, image signing, SBOM, SAST/secret/SCA/container/IaC/license gates.
