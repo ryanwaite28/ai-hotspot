@@ -8,10 +8,11 @@ UPDATE media_asset_derivatives deriv
 SET
   source_owner_user_id = source_asset.owner_user_id,
   destination_owner_user_id = destination_asset.owner_user_id,
-  created_by_user_id = COALESCE(created_by_user_id, deriv.owner_user_id)
-FROM media_assets source_asset
-JOIN media_assets destination_asset ON destination_asset.id = deriv.destination_media_asset_id
-WHERE source_asset.id = deriv.source_media_asset_id;
+  created_by_user_id = COALESCE(deriv.created_by_user_id, deriv.owner_user_id)
+FROM media_assets source_asset,
+     media_assets destination_asset
+WHERE source_asset.id = deriv.source_media_asset_id
+  AND destination_asset.id = deriv.destination_media_asset_id;
 
 ALTER TABLE media_asset_derivatives
   ALTER COLUMN source_owner_user_id SET NOT NULL,

@@ -1,5 +1,96 @@
 # HotSpot Changelog
 
+## 2026-11-20 — Copilot session steering mechanism
+
+### Completed
+
+- Added a reusable `session-steering` skill to keep implementation sessions aligned with `PROJECT.md`, architecture boundaries, and active skills.
+- Added a steering checklist reference for start/in-session/exit gates.
+- Updated `.github/copilot-instructions.md` to require session steering gates for all implementation sessions.
+- Updated `PROJECT.md` with a mandatory Session Steering Protocol under the implementation plan.
+
+### Verification evidence
+
+- VS Code diagnostics check passed with no errors in:
+	- `.github/skills/session-steering/SKILL.md`
+	- `.github/skills/session-steering/references/session-steering-checklist.md`
+	- `.github/copilot-instructions.md`
+	- `.github/skills/README.md`
+	- `PROJECT.md`
+
+### Deferred
+
+- Add optional automation (pre-commit or CI doc checks) to enforce changelog evidence formatting and phase lock metadata.
+
+## 2026-11-20 — Gateway auth microservice boundary split
+
+### Completed
+
+- Replaced gateway auth traffic dependency on `SocialServiceClient` with a dedicated `AuthServiceClient` and provider token wiring.
+- Added `AUTH_SERVICE_URL` as canonical gateway auth downstream setting, with transitional fallback to `SOCIAL_SERVICE_URL`.
+- Updated gateway auth controller wiring to use the dedicated auth client.
+- Updated architecture spec to enforce domain-scoped microservices and one typed gateway client per downstream microservice domain.
+
+### Verification evidence
+
+- VS Code diagnostics check passed with no errors in:
+	- `gateway/nest-http/src/clients/auth-service.client.ts`
+	- `gateway/nest-http/src/app.module.ts`
+	- `gateway/nest-http/src/main.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.controller.ts`
+	- `PROJECT.md`
+
+### Deferred
+
+- Runtime extraction of auth domain from social service into an independent auth deployment.
+- Dedicated gateway clients and protected-header forwarding adapters for all remaining downstream domains (social, entitlement, media, identity).
+
+## 2026-11-20 — Posts vertical-slice NestJS simplification
+
+### Completed
+
+- Added social service internal posts dispatch controller at `/internal/v1/posts/**` with transport-only request mapping.
+- Converted posts domain wiring to idiomatic NestJS provider injection:
+	- `PostsService` is now an injectable service.
+	- `PostgresPostsRepository` is now an injectable repository.
+	- Added explicit provider tokens for query executor and posts repository.
+- Wired posts controller/providers into the social service `AppModule` while keeping all domain decisions in `PostsService`.
+
+### Verification evidence
+
+- VS Code diagnostics check passed with no errors in:
+	- `services/social-nest/src/handlers/posts/posts.controller.ts`
+	- `services/social-nest/src/service/posts/posts.service.ts`
+	- `services/social-nest/src/service/posts/postgres-posts.repository.ts`
+	- `services/social-nest/src/app.module.ts`
+
+### Deferred
+
+- Gateway-to-social posts client routing and gateway dispatch endpoints for posts remain to be wired.
+- Remaining domains (`social`, `media`, `stories`, `campaigns`, `live`, `creator-subscriptions`) still need the same DI/module migration pattern.
+
+## 2026-11-20 — Architecture reconciliation and NestJS DI simplification
+
+### Completed
+
+- Reconciled implementation-plan semantics in `PROJECT.md` with an explicit architecture baseline that distinguishes implemented/scaffolded/deferred work.
+- Added reconciliation controls requiring FR-level runtime evidence before marking delivery complete.
+- Simplified social auth dispatch wiring by replacing custom `AUTH_HANDLER` token object mapping with direct `AuthService` injection in the social service Nest module/controller.
+- Simplified gateway client wiring by replacing manual object construction with idiomatic NestJS provider/token injection for `SocialServiceClient`.
+
+### Verification evidence
+
+- VS Code diagnostics check passed with no errors in:
+	- `services/social-nest/src/app.module.ts`
+	- `services/social-nest/src/handlers/auth/auth.controller.ts`
+	- `gateway/nest-http/src/app.module.ts`
+	- `gateway/nest-http/src/clients/social-service.client.ts`
+
+### Deferred
+
+- Convert remaining social domain composition factories to explicit NestJS modules/providers (`services/social-nest/src/service/**`).
+- Build a phase-by-phase implemented/scaffolded/deferred evidence matrix in the changelog.
+
 ## 2026-11-20 — Phase 12 frontend MVP foundation
 
 ### Completed
@@ -31,7 +122,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
 - Result: 11 passed, 0 failed.
 
 ### Pending
@@ -54,7 +145,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/live/live.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/live/live.service.test.ts`
 - Result: 2 passed, 0 failed.
 
 ### Pending
@@ -77,7 +168,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/campaigns/campaigns.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/campaigns/campaigns.service.test.ts`
 - Result: 2 passed, 0 failed.
 
 ### Pending
@@ -98,7 +189,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/creator-subscriptions/creator-tiers.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/creator-subscriptions/creator-tiers.service.test.ts`
 - Result: 2 passed, 0 failed.
 
 ### Pending
@@ -173,24 +264,24 @@
 	- stitch timeline boundaries are validated
 	- duet split layouts are validated
 	- source/destination cannot be the same asset
-	- file: `apps/api-nest/src/service/media/media.service.ts`
+	- file: `services/social-nest/src/service/media/media.service.ts`
 - Added derivative relationship repository/SQL/outbox foundation:
 	- explicit `media_asset_derivatives` table migration
 	- `media.derivative.created` outbox event
 	- duplicate relationship protection
 	- files:
-		- `apps/api-nest/src/db/queries/media.queries.ts`
-		- `apps/api-nest/src/service/media/postgres-media.repository.ts`
+		- `services/social-nest/src/db/queries/media.queries.ts`
+		- `services/social-nest/src/service/media/postgres-media.repository.ts`
 		- `prisma/migrations/20261119_phase6_derivative_relationships/migration.sql`
 		- `prisma/schema.prisma`
 - Added media handler derivative entrypoint:
-	- `apps/api-nest/src/handlers/media/media.handler.ts`
+	- `gateway/nest-http/src/handlers/media/media.handler.ts`
 - Added unit coverage for allowed stitch/duet creation and blocked/unready/invalid derivatives:
-	- `apps/api-nest/src/service/media/media.service.test.ts`
+	- `services/social-nest/src/service/media/media.service.test.ts`
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/media/media.service.test.ts`
 - Result: 6 passed, 0 failed.
 
 ### Pending
@@ -208,12 +299,12 @@
 	- exact expiry boundary semantics (story is inaccessible at `expires_at` second)
 	- hidden/blocked behavior for otherwise public stories
 	- reply-delivery rejection for blocked viewers and expired stories
-	- file: `apps/api-nest/src/service/stories/stories.service.test.ts`
+	- file: `services/social-nest/src/service/stories/stories.service.test.ts`
 - Updated `PROJECT.md` to mark the remaining Phase 5 checklist items complete.
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/stories/stories.service.test.ts`
 
 ## 2026-11-19 — Notification idempotency lifecycle reliability upgrade
 
@@ -229,8 +320,8 @@
 	- `workers/notification-node/subscribers/user-email-reset-requested.subscriber.ts`
 	- `workers/notification-node/subscribers/story-reply-created-notification.subscriber.ts`
 - Reworked subscriber idempotency SQL/repository contracts for lifecycle semantics with lease-aware reclaims:
-	- `apps/api-nest/src/db/queries/subscriber-idempotency.queries.ts`
-	- `apps/api-nest/src/service/events/subscriber-idempotency.repository.ts`
+	- `services/social-nest/src/db/queries/subscriber-idempotency.queries.ts`
+	- `services/social-nest/src/service/events/subscriber-idempotency.repository.ts`
 - Added schema migration and Prisma model updates for lifecycle fields (`attempt_count`, `first_seen_at`, `last_attempt_at`, `lease_expires_at`, `completed_at`, `last_error`) plus status/lease index:
 	- `prisma/migrations/20261119_phase1_subscriber_idempotency_lifecycle/migration.sql`
 	- `prisma/schema.prisma`
@@ -252,10 +343,10 @@
 	- added outbox enqueue path for `story.reply.created`
 	- files:
 		- `packages/contracts/src/story-contracts.ts`
-		- `apps/api-nest/src/handlers/stories/stories.handler.ts`
-		- `apps/api-nest/src/service/stories/stories.service.ts`
-		- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
-		- `apps/api-nest/src/db/queries/stories.queries.ts`
+		- `gateway/nest-http/src/handlers/stories/stories.handler.ts`
+		- `services/social-nest/src/service/stories/stories.service.ts`
+		- `services/social-nest/src/service/stories/postgres-stories.repository.ts`
+		- `services/social-nest/src/db/queries/stories.queries.ts`
 - Added notification-worker support for story reply events:
 	- `story.reply.created` contract in domain events
 	- new `StoryReplyCreatedNotificationSubscriber`
@@ -282,7 +373,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/cleanup-node/bootstrap.test.ts workers/cleanup-node/stories-service-api.client.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/stories/stories.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/cleanup-node/bootstrap.test.ts workers/cleanup-node/stories-service-api.client.test.ts`
 
 ## 2026-11-19 — Phase 5 stories visibility and viewer records
 
@@ -294,26 +385,26 @@
 	- active-story lookup
 	- viewer/author relationship state checks (`follows` + `blocks`)
 	- files:
-		- `apps/api-nest/src/db/queries/stories.queries.ts`
-		- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
+		- `services/social-nest/src/db/queries/stories.queries.ts`
+		- `services/social-nest/src/service/stories/postgres-stories.repository.ts`
 - Implemented story-view and viewer-summary service operations:
 	- visibility enforcement for `public`, `followers`, and owner-only `close_friends`
 	- owner-only viewer summary access
 	- files:
-		- `apps/api-nest/src/service/stories/stories.service.ts`
-		- `apps/api-nest/src/handlers/stories/stories.handler.ts`
+		- `services/social-nest/src/service/stories/stories.service.ts`
+		- `gateway/nest-http/src/handlers/stories/stories.handler.ts`
 - Added story-view tracking port implementations:
 	- Mongo-backed `story_views` repository
 	- in-memory fallback for local/test contexts
 	- files:
-		- `apps/api-nest/src/db/mongo/story-views.repository.ts`
-		- `apps/api-nest/src/service/stories/stories.composition.ts`
+		- `services/social-nest/src/db/mongo/story-views.repository.ts`
+		- `services/social-nest/src/service/stories/stories.composition.ts`
 - Expanded stories service tests to cover visibility gates and owner-only viewer summaries.
 - Updated `PROJECT.md` Phase 5 checklist to mark “Implement story visibility and viewer records” complete.
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/stories/stories.service.test.ts`
 - result: 5 passed, 0 failed.
 
 ## 2026-11-19 — Phase 5 stories started (creation + expiry)
@@ -328,22 +419,22 @@
 	- story publish insert with `story.created` outbox event
 	- active-story query by author
 	- expiry cleanup delete with `story.expired` outbox event
-	- file: `apps/api-nest/src/db/queries/stories.queries.ts`
+	- file: `services/social-nest/src/db/queries/stories.queries.ts`
 - Added stories service/repository/handler composition for Phase 5 foundations:
-	- `apps/api-nest/src/service/stories/postgres-stories.repository.ts`
-	- `apps/api-nest/src/service/stories/stories.service.ts`
-	- `apps/api-nest/src/handlers/stories/stories.handler.ts`
-	- `apps/api-nest/src/service/stories/stories.composition.ts`
+	- `services/social-nest/src/service/stories/postgres-stories.repository.ts`
+	- `services/social-nest/src/service/stories/stories.service.ts`
+	- `gateway/nest-http/src/handlers/stories/stories.handler.ts`
+	- `services/social-nest/src/service/stories/stories.composition.ts`
 - Added unit tests covering:
 	- strict 24-hour expiry assignment at publish time
 	- publish rejection when media is not ready/eligible
 	- expiry cleanup behavior and expired story IDs
-	- file: `apps/api-nest/src/service/stories/stories.service.test.ts`
+	- file: `services/social-nest/src/service/stories/stories.service.test.ts`
 - Updated `PROJECT.md` Phase 5 checklist to mark “Implement story creation and 24-hour expiry” complete.
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/stories/stories.service.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/stories/stories.service.test.ts`
 - result: 3 passed, 0 failed.
 
 ## 2026-11-19 — Dev domain planning context update
@@ -414,7 +505,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts workers/media-node/bootstrap.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts workers/media-node/bootstrap.test.ts`
 - result: 9 passed, 0 failed.
 
 ## 2026-11-19 — Phase 4 media pipeline continuation
@@ -438,7 +529,7 @@
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/media/media.service.test.ts workers/media-node/subscribers/media-processing.subscriber.test.ts workers/media-node/rabbitmq/media-processing-consumer.test.ts`
 - result: 8 passed, 0 failed.
 
 ## 2026-11-19 — CDN strategy approved for k3s homelab
@@ -469,11 +560,11 @@
 	- `packages/contracts/src/media-contracts.ts`
 	- updated exports in `packages/contracts/src/index.ts`
 - Implemented API-side media service scaffolding with strict typed service/repository boundaries:
-	- `apps/api-nest/src/db/queries/media.queries.ts`
-	- `apps/api-nest/src/service/media/postgres-media.repository.ts`
-	- `apps/api-nest/src/service/media/media.service.ts`
-	- `apps/api-nest/src/handlers/media/media.handler.ts`
-	- `apps/api-nest/src/service/media/media.composition.ts`
+	- `services/social-nest/src/db/queries/media.queries.ts`
+	- `services/social-nest/src/service/media/postgres-media.repository.ts`
+	- `services/social-nest/src/service/media/media.service.ts`
+	- `gateway/nest-http/src/handlers/media/media.handler.ts`
+	- `services/social-nest/src/service/media/media.composition.ts`
 - Added media lifecycle logic for:
 	- resumable upload session creation
 	- MIME/size validation
@@ -491,16 +582,16 @@
 - Added Python media worker scaffold entrypoint for processing-event handling:
 	- `services/media-python/worker.py`
 - Added media unit tests and runtime-integration harness/tests:
-	- `apps/api-nest/src/service/media/media.service.test.ts`
-	- `apps/api-nest/src/service/media/media.runtime.integration.harness.ts`
-	- `apps/api-nest/src/service/media/media.runtime.integration.test.ts`
+	- `services/social-nest/src/service/media/media.service.test.ts`
+	- `services/social-nest/src/service/media/media.runtime.integration.harness.ts`
+	- `services/social-nest/src/service/media/media.runtime.integration.test.ts`
 - Added script for Phase 4 runtime integration runs:
 	- `package.json` (`test:phase4:runtime`)
 
 ### Verification evidence
 
 - Unit tests executed and passing:
-	- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.service.test.ts`
+	- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/media/media.service.test.ts`
 	- result: 3 passed, 0 failed
 - Runtime integration command executed:
 	- `npm run -s test:phase4:runtime`
@@ -578,7 +669,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 1. Add root and service-level `Dockerfile` assets for build pipeline parity.
 2. Replace placeholder npm scripts with real workspace tooling (pnpm/npm workspaces, Nx, or Turborepo).
-3. Add first `apps/api-nest` scaffold and health endpoint.
+3. Add first `gateway/nest-http` scaffold and health endpoint.
 4. Add first database migration workflow (Prisma/Flyway) and local deterministic seed data.
 5. Add namespace-specific overlays (`dev`/`prod`) for image tags and hostnames.
 
@@ -600,7 +691,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Next resume point
 
 1. Add root `Dockerfile` and service-specific Dockerfiles with non-root users and pinned base image digests.
-2. Add first runnable `apps/api-nest` scaffold with `/health` endpoint and request validation.
+2. Add first runnable `gateway/nest-http` scaffold with `/health` endpoint and request validation.
 3. Add lockfile and workspace package manager strategy (`npm` workspaces or `pnpm`) with dependency pinning.
 4. Add pre-commit secret scanning hook and CI artifact/SBOM generation.
 
@@ -626,7 +717,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 ### Next resume point
 
-1. Implement registration and email-verification flow in `apps/api-nest`.
+1. Implement registration and email-verification flow in `gateway/nest-http`.
 2. Add JWT access/refresh token issue/rotation and session revocation path.
 3. Add auth unit tests for service-layer behavior.
 
@@ -638,10 +729,10 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- password hashing and verification helpers (`scrypt`)
 	- signed email-verification token create/verify helpers
 - Added initial API service-layer auth scaffolding:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.ts`
 - Added first unit test for registration normalization and verification-token creation:
-	- `apps/api-nest/src/service/auth/auth.service.test.ts`
+	- `services/social-nest/src/service/auth/auth.service.test.ts`
 
 ### Notes
 
@@ -680,8 +771,8 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- success metrics
 - Implemented JWT session scaffolding for Phase 1:
 	- `packages/auth/src/jwt.js`
-	- `apps/api-nest/src/service/auth/auth.service.ts` token issue + refresh rotation
-	- `apps/api-nest/src/service/auth/auth.service.test.ts` coverage for token issuance, rotation, and replay rejection
+	- `services/social-nest/src/service/auth/auth.service.ts` token issue + refresh rotation
+	- `services/social-nest/src/service/auth/auth.service.test.ts` coverage for token issuance, rotation, and replay rejection
 - Updated contracts for session token response shape in `packages/contracts/src/auth-contracts.ts`.
 - Marked Phase 1 JWT/refresh foundation checklist item complete with a passkey-pending note.
 
@@ -696,9 +787,9 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added PostgreSQL query module for auth user/session operations:
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
 - Added `AuthRepository` PostgreSQL implementation:
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
 - Kept service-layer boundaries intact by routing SQL access through the query module and repository implementation.
 
 ### Next resume point
@@ -777,16 +868,16 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added account-status gating in auth token issuance and refresh rotation paths:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
 - Added RBAC role propagation into access/refresh JWT claims:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
 - Extended auth repository/query support for user lookup and role mapping:
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
 - Expanded auth unit test coverage for role claim presence and suspended-account issuance rejection:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
 - Added concrete composition wiring entry point for auth runtime assembly:
-	- `apps/api-nest/src/service/auth/auth.composition.ts`
+	- `services/social-nest/src/service/auth/auth.composition.ts`
 
 ### Notes
 
@@ -809,14 +900,14 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Added shared contracts for callback input/result:
 	- `packages/contracts/src/auth-contracts.ts`
 - Added repository query paths and implementation for callback dedup and status application:
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
 - Added auth service callback processing with signature validation:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
 - Added composition config support for callback secret:
-	- `apps/api-nest/src/service/auth/auth.composition.ts`
+	- `services/social-nest/src/service/auth/auth.composition.ts`
 - Added unit-test coverage for valid signature processing, duplicate event handling, and invalid-signature rejection:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
 - Added new migration for role consistency and callback dedup event tracking:
 	- `prisma/migrations/20261119_phase1_identity_callbacks/migration.sql`
 	- `prisma/schema.prisma`
@@ -836,12 +927,12 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added service-level adapter contract and orchestration for starting provider verification sessions:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
 - Added repository persistence path for provider session creation:
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
 - Added unit-test coverage for verification start success and ineligible-user rejection:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
 
 ### Notes
 
@@ -862,13 +953,13 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Updated Prisma schema with passkey challenge/credential models:
 	- `prisma/schema.prisma`
 - Added passkey query primitives and row types:
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
 - Added PostgreSQL passkey repository implementation:
-	- `apps/api-nest/src/service/auth/postgres-passkey.repository.ts`
+	- `services/social-nest/src/service/auth/postgres-passkey.repository.ts`
 - Added passkey service scaffolding for registration/authentication challenge lifecycle and session issuance:
-	- `apps/api-nest/src/service/auth/passkey.service.js`
+	- `services/social-nest/src/service/auth/passkey.service.js`
 - Added passkey service unit test coverage for challenge consumption, registration/authentication success path, and replay rejection:
-	- `apps/api-nest/src/service/auth/passkey.service.test.js`
+	- `services/social-nest/src/service/auth/passkey.service.test.js`
 - Added shared passkey contract types:
 	- `packages/contracts/src/auth-contracts.ts`
 
@@ -888,18 +979,18 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added concrete identity verification provider adapter implementation:
-	- `apps/api-nest/src/service/auth/identity-verification.provider.ts`
+	- `services/social-nest/src/service/auth/identity-verification.provider.ts`
 - Added passkey verifier adapter scaffold:
-	- `apps/api-nest/src/service/auth/passkey-verifier.adapter.js`
-	- `apps/api-nest/src/service/auth/passkey-verifier.adapter.d.ts`
+	- `services/social-nest/src/service/auth/passkey-verifier.adapter.js`
+	- `services/social-nest/src/service/auth/passkey-verifier.adapter.d.ts`
 - Added passkey service declaration surface for TS composition imports:
-	- `apps/api-nest/src/service/auth/passkey.service.d.ts`
+	- `services/social-nest/src/service/auth/passkey.service.d.ts`
 - Expanded auth dispatch handler with identity verification and passkey endpoint methods:
-	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.ts`
 - Wired adapters and passkey stack into auth composition:
-	- `apps/api-nest/src/service/auth/auth.composition.ts`
+	- `services/social-nest/src/service/auth/auth.composition.ts`
 - Added handler delegation unit coverage:
-	- `apps/api-nest/src/handlers/auth/auth.handler.test.js`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.test.js`
 
 ### Outcome
 
@@ -934,19 +1025,19 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- `prisma/migrations/20261119_phase1_outbox_foundation/migration.sql`
 	- `prisma/schema.prisma` (`DomainEventOutbox`)
 - Implemented auth repository outbox-backed user creation (`user.created`):
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
 - Implemented auth email reset request outbox enqueue (`user.email-reset-requested`):
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.ts`
 - Added outbox publisher service scaffolding and batch publish retry handling:
-	- `apps/api-nest/src/db/queries/outbox.queries.ts`
-	- `apps/api-nest/src/service/events/outbox-publisher.service.ts`
+	- `services/social-nest/src/db/queries/outbox.queries.ts`
+	- `services/social-nest/src/service/events/outbox-publisher.service.ts`
 	- `workers/notification-node/outbox-publisher.js`
 - Added unit tests for auth outbox behavior and outbox publisher batch behavior:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
-	- `apps/api-nest/src/service/events/outbox-publisher.service.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
+	- `services/social-nest/src/service/events/outbox-publisher.service.test.js`
 - Added shared domain event contracts:
 	- `packages/contracts/src/domain-events.ts`
 
@@ -968,8 +1059,8 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- `prisma/migrations/20261119_phase1_subscriber_idempotency/migration.sql`
 	- `prisma/schema.prisma` (`ConsumedDomainEvent`)
 - Added subscriber idempotency repository and SQL query contract:
-	- `apps/api-nest/src/db/queries/subscriber-idempotency.queries.ts`
-	- `apps/api-nest/src/service/events/subscriber-idempotency.repository.ts`
+	- `services/social-nest/src/db/queries/subscriber-idempotency.queries.ts`
+	- `services/social-nest/src/service/events/subscriber-idempotency.repository.ts`
 - Added shared email adapter contract scaffold:
 	- `workers/notification-node/email/email-service.adapter.js`
 - Added concrete notification subscribers:
@@ -1019,16 +1110,16 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- `user.suspended`
 	- `user.flagged`
 - Added service/repository/query support for these mutations:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
-	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.ts`
 - Added user flag persistence fields and migration support:
 	- `prisma/migrations/20261119_phase1_user_mutation_event_fields/migration.sql`
 	- `prisma/schema.prisma`
 - Added/updated tests for auth mutation handling and handler delegation:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
-	- `apps/api-nest/src/handlers/auth/auth.handler.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.test.js`
 - Added notification RabbitMQ consumer adapter and bootstrap runtime wiring:
 	- `workers/notification-node/rabbitmq/notification-consumer.js`
 	- `workers/notification-node/bootstrap.js`
@@ -1056,22 +1147,22 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 	- `prisma/migrations/20261119_phase1_user_mutation_event_fields/migration.sql`
 	- `prisma/schema.prisma`
 - Implemented trial activation-once orchestration in auth verification flow (`verifyEmailToken` now triggers one-time trial activation mutation):
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
 - Implemented account export/deactivate/delete workflow scaffolding:
-	- `apps/api-nest/src/service/auth/auth.service.ts`
-	- `apps/api-nest/src/service/auth/postgres-auth.repository.ts`
-	- `apps/api-nest/src/db/queries/auth.queries.ts`
-	- `apps/api-nest/src/handlers/auth/auth.handler.ts`
+	- `services/social-nest/src/service/auth/auth.service.ts`
+	- `services/social-nest/src/service/auth/postgres-auth.repository.ts`
+	- `services/social-nest/src/db/queries/auth.queries.ts`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.ts`
 - Added outbox-backed lifecycle mutation events:
 	- `user.trial-activated`
 	- `user.export-requested`
 	- `user.deactivated`
 	- `user.deleted`
 - Expanded auth/handler tests to cover all auth service methods currently implemented:
-	- `apps/api-nest/src/service/auth/auth.service.test.js`
-	- `apps/api-nest/src/handlers/auth/auth.handler.test.js`
+	- `services/social-nest/src/service/auth/auth.service.test.js`
+	- `gateway/nest-http/src/handlers/auth/auth.handler.test.js`
 
 ### Outcome
 
@@ -1086,7 +1177,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added integration-style test for outbox publish flow into notification subscribers with dedup and retry accounting:
-	- `apps/api-nest/src/service/events/outbox-subscriber.integration.test.js`
+	- `services/social-nest/src/service/events/outbox-subscriber.integration.test.js`
 	- verifies publish success/failure counters, outbox publish-attempt increment on failure, and duplicate-delivery dedup behavior.
 - Expanded RabbitMQ consumer tests to explicitly validate dead-letter path semantics:
 	- `workers/notification-node/rabbitmq/notification-consumer.test.js`
@@ -1105,8 +1196,8 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 ### Completed
 
 - Added runtime-gated auth integration test suite:
-	- `apps/api-nest/src/service/auth/auth.runtime.integration.test.js`
-	- `apps/api-nest/src/service/auth/auth.runtime.integration.harness.js`
+	- `services/social-nest/src/service/auth/auth.runtime.integration.test.js`
+	- `services/social-nest/src/service/auth/auth.runtime.integration.harness.js`
 - Added runtime-gated notification consumer integration test suite:
 	- `workers/notification-node/rabbitmq/notification.runtime.integration.test.js`
 - Added package script entrypoint for execution once runtime deps exist:
@@ -1161,7 +1252,7 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 
 ### Verification evidence
 
-- `node -r ts-node/register/transpile-only --test apps/api-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
+- `node -r ts-node/register/transpile-only --test services/social-nest/src/service/moderation/moderation.service.test.ts workers/notification-node/subscribers/subscribers.test.ts workers/notification-node/subscribers/transactional-template.subscriber.test.ts`
 - Result: 13 passed, 0 failed.
 
 ### Pending
@@ -1180,3 +1271,11 @@ Continue Phase 0 by wiring real service bootstraps and first runnable app slices
 - Expanded the implementation plan with a dedicated startup, DevOps, IaC, secrets, migration, security, observability, backup, and rollout phase.
 - Added explicit Phase 13 exit evidence and a formal Runtime Completion Gate with a source/scaffold/runtime/pending status ledger.
 - Added executable startup and health acceptance requirements for Nest, Spring, workers, Next.js, Expo, infrastructure, and migrations.
+
+## 2026-11-19 — Gateway/social microservice separation
+
+- Refactored Nest code into `gateway/nest-http` and `services/social-nest` runtimes.
+- The gateway now contains HTTP controllers, health routes, and typed HTTP service clients only.
+- The social microservice owns PostgreSQL/MongoDB repositories, domain services, compositions, and internal auth routes.
+- Added `gateway:start` and `social-service:start` scripts.
+- Verified live gateway forwarding: HTTP `/v1/auth/register` returned 201 for a fresh account and 409 for a duplicate account.

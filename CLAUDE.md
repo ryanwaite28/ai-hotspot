@@ -4,7 +4,7 @@
 
 HotSpot is an intentionally authentic, identity-verified social media platform that combines text threads, photo/video media, stories, stitches/duets, creator subscriptions, marketing, and live streams. The stack uses Next.js, NestJS, Java 21/Spring, Python workers, PostgreSQL, MongoDB, Redis, RabbitMQ, object storage, and LiveKit. It runs on the existing rmwhs.com k3s home cluster; `PROJECT.md` is the full specification and source of truth.
 
-AI security context is anchored by `.copilot/skills/devsecops/SKILL.md` and must be applied during code, CI, and infrastructure changes.
+AI security context is anchored by `.github/skills/devsecops/SKILL.md` and must be applied during code, CI, and infrastructure changes.
 
 ## Quick Start
 
@@ -54,7 +54,9 @@ npm run stripe:listen
 - Service layer: `src/service/{domain}.service.ts`
 - PostgreSQL repositories: `src/db/queries/{domain}.queries.ts`
 - MongoDB repositories: `src/db/mongo/{collection}.repository.ts`
-- Nest API handlers: `apps/api-nest/src/handlers/{domain}/{domain}.handler.ts`
+- HTTP/BFF gateway: `gateway/nest-http/src/handlers/{domain}/{domain}.handler.ts`
+- Gateway typed clients: `gateway/nest-http/src/clients/{domain}/{domain}.service-client.ts`
+- Social Nest domain service: `services/social-nest/src/{service,db,handlers}/`
 - Spring domains: `services/entitlement-spring/src/main/java/.../{domain}/`
 - Python workers: `services/{worker-name}/app/`
 - RabbitMQ Node workers: `workers/{domain-node}/src/`

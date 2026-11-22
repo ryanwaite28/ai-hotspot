@@ -34,6 +34,7 @@ export interface RegisterUserInput {
   handle: string;
   email: string;
   password: string;
+  displayName: string;
 }
 
 export interface RegisterUserResult {

@@ -2,7 +2,7 @@
 
 ## Scope
 
-Re-evaluation of HotSpot architecture and implementation status using the architect-pro-system-design guardrails.
+Re-evaluation of HotSpot architecture and implementation status using the architect-pro guardrails.
 
 ## Findings
 

@@ -1,0 +1,1 @@
+export const QUERY_EXECUTOR = 'QUERY_EXECUTOR';

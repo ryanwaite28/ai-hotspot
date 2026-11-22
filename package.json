@@ -4,24 +4,31 @@
   "version": "0.1.0",
   "description": "HotSpot monorepo",
   "scripts": {
-    "build": "echo 'TODO: wire monorepo build (apps/services/workers)'",
-    "test": "echo 'TODO: wire unit tests'",
-    "test:integration": "echo 'TODO: wire integration tests'",
-    "test:phase1:runtime": "PHASE1_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/auth/auth.runtime.integration.test.js workers/notification-node/rabbitmq/notification.runtime.integration.test.ts",
-    "test:phase2:runtime": "PHASE2_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/social/social.runtime.integration.test.ts",
-    "test:phase3:runtime": "PHASE3_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/posts/posts.runtime.integration.test.ts",
-    "test:phase4:runtime": "PHASE4_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test apps/api-nest/src/service/media/media.runtime.integration.test.ts",
+    "build": "npm run web:build",
+    "test": "npm run web:typecheck",
+    "test:integration": "echo 'TODO: wire integration test suite'",
+    "test:phase1:runtime": "set -a && source .env && set +a && export RABBITMQ_URL='amqp://hotspot:replace_me@127.0.0.1:5672/hotspot' POSTGRES_URL='postgresql://hotspot:replace_me@127.0.0.1:5432/hotspot' && PHASE1_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test services/social-nest/src/service/auth/auth.runtime.integration.test.js workers/notification-node/rabbitmq/notification.runtime.integration.test.ts",
+    "test:phase2:runtime": "PHASE2_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test services/social-nest/src/service/social/social.runtime.integration.test.ts",
+    "test:phase3:runtime": "PHASE3_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test services/social-nest/src/service/posts/posts.runtime.integration.test.ts",
+    "test:phase4:runtime": "PHASE4_RUNTIME_INTEGRATION=1 node -r ts-node/register/transpile-only --test services/social-nest/src/service/media/media.runtime.integration.test.ts",
     "test:e2e": "npm --prefix apps/web run test:e2e",
-    "db:migrate": "echo 'TODO: add migration tooling (Prisma/Flyway)'",
+    "db:migrate": "bash scripts/migrate-local.sh",
     "db:seed": "bash scripts/seed-local.sh",
     "dev": "npm --prefix apps/web run dev",
+    "bootstrap:local": "bash scripts/bootstrap.sh",
+    "reset:local": "bash scripts/reset-local.sh",
+    "reset:local:seed": "bash scripts/reset-local.sh --seed",
     "worker:media": "node -r ts-node/register/transpile-only workers/media-node/main.ts",
     "worker:cleanup": "node -r ts-node/register/transpile-only workers/cleanup-node/main.ts",
     "deploy:dev": "bash ci/deploy.sh dev",
     "deploy:prod": "bash ci/deploy.sh prod",
     "stripe:listen": "bash scripts/stripe-listener.sh",
     "web:build": "npm --prefix apps/web run build",
-    "web:typecheck": "npm --prefix apps/web run typecheck"
+    "web:typecheck": "npm --prefix apps/web run typecheck",
+    "gateway:dev": "node -r ts-node/register/transpile-only gateway/nest-http/src/main.ts",
+    "gateway:start": "node -r ts-node/register/transpile-only gateway/nest-http/src/main.ts",
+    "social-service:dev": "node -r ts-node/register/transpile-only services/social-nest/src/main.ts",
+    "social-service:start": "node -r ts-node/register/transpile-only services/social-nest/src/main.ts"
   },
   "engines": {
     "node": ">=22"
@@ -36,5 +43,11 @@
     "rxjs-rabbitmq": "^2.2.3",
     "ts-node": "^10.9.2",
     "typescript": "5.8.2"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.6.0",
+    "@nestjs/core": "^12.6.0",
+    "@nestjs/platform-express": "^12.6.0",
+    "reflect-metadata": "^0.2.2"
   }
 }

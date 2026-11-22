@@ -7,11 +7,15 @@
     "esModuleInterop": true,
     "types": ["node"],
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": [
     "apps/**/*.ts",
     "packages/**/*.ts",
-    "workers/**/*.ts"
+    "workers/**/*.ts",
+    "gateway/**/*.ts",
+    "services/**/*.ts"
   ]
 }

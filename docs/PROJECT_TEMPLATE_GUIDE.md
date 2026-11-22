@@ -195,7 +195,20 @@ Every `PROJECT.md` uses this numbered structure:
 
 **Required subsections**:
 
-- **6.1 Repository Structure** — Full directory tree as a code block. Include every significant file. Group by: `prisma/`, `src/service/`, `src/db/`, `src/handlers/api/`, `src/handlers/sqs/`, `src/clients/`, `src/emails/`, `src/types/`, `local/`, `frontend/`, `infra/terraform/`, `scripts/`.
+- **6.1 Repository Structure** — Full directory tree as a code block. It must show a clear separation between a named gateway and named domain services. For example:
+  ```text
+  gateway/<framework>-http/     # single external HTTP/BFF entrypoint
+    src/handlers/               # transport adapters only
+    src/clients/                # typed service-client contracts
+    src/middleware/             # auth context, validation, rate limits, correlation
+  services/<bounded-context>/   # business domain service runtime
+    src/service/                # orchestration and domain services
+    src/db/                     # repositories/query adapters
+    src/contracts/              # typed service API/events
+  apps/web/                     # browser client, if applicable
+  workers/<domain-node>/        # transport/event dispatch adapters only
+  ```
+  Do not use an ambiguous `api-*` or `app-*` directory as the sole name for the gateway or collapse gateway and service code into the same package. Include every significant file and group migrations, repositories, handlers, clients, templates, types, infrastructure, scripts, and tests accordingly.
 
 - **6.2 Service Layer Internal RPC Contract** — The complete TypeScript `ServiceAction` union type listing every action the service layer can perform. This is the interface contract between dispatch Lambdas and the service layer. Format:
   ```typescript
@@ -284,6 +297,8 @@ Every `PROJECT.md` uses this numbered structure:
 **Format**: Numbered phases as `### Phase N — Name`. Each phase contains a checklist `- [ ] task`.
 
 **Mandatory implementation-plan granularity**:
+- Structure gateway and service implementation separately. HTTP handlers, routes, auth-context mapping, and typed clients belong to the named gateway phase/workstream; domain orchestration, repositories, DB access, transactions, and outbox publication belong to named service runtimes.
+- The gateway must remain the single external entrypoint unless the document explicitly defines a second provider-only adapter or webhook ingress. Do not name the gateway only `api-*`, `app-*`, or an ambiguous framework package name.
 - Structure feature phases with a one-to-many Functional Requirement (FR) to specification relationship: each FR is a named parent under the phase, and each parent contains multiple concrete specs/checklist items.
 - Use this pattern:
   ```markdown
@@ -325,19 +340,20 @@ Every `PROJECT.md` uses this numbered structure:
 
 **Required rules to always include**:
 
-1. **Service Layer Supremacy** (restate): all business logic in `src/service/`. Lambda handlers do three things only: parse input, call service, return result.
-2. **Dispatch Layer = Gateways/Adapters only**: API gateways/controllers/handlers/consumers/schedulers/webhook receivers are transport adapters and cannot be treated as service-layer components.
-3. **Orchestration belongs to service modules**: multi-step workflow sequencing across repositories/events must live in service-layer use-case orchestrators, not in handlers/consumers/controllers.
-4. **No direct DB access outside `src/db/`**: all DB queries go through typed query functions.
+1. **Gateway/Service Separation** (restate): external HTTP/WebSocket traffic enters through one explicitly named gateway. Gateway code only parses transport input, validates/authenticates context, invokes typed service clients, and maps output. Domain logic, repositories, DB clients, transactions, and outbox publication belong in named `services/<bounded-context>/` runtimes.
+2. **Service Layer Supremacy** (restate): all business logic in `src/service/`. Lambda handlers do three things only: parse input, call service, return result.
+3. **Dispatch Layer = Gateways/Adapters only**: API gateways/controllers/handlers/consumers/schedulers/webhook receivers are transport adapters and cannot be treated as service-layer components.
+4. **Orchestration belongs to service modules**: multi-step workflow sequencing across repositories/events must live in service-layer use-case orchestrators, not in handlers/consumers/controllers.
+5. **No direct DB access outside `src/db/`**: all DB queries go through typed query functions.
   - Clarification to include verbatim in project rules: worker applications and other dispatch adapters must not instantiate DB clients or use connection strings directly; they call service APIs/contracts.
-5. **No secrets in code**: use env vars, never hardcode.
-6. **TypeScript strict mode**: no `any`, no implicit returns, explicit types on all function signatures.
-7. **Error handling**: all errors bubble up as typed error objects or result types; no unhandled promise rejections.
-8. **Idempotency**: every write operation that accepts an `idempotencyKey` must enforce uniqueness.
-9. **Test coverage**: every service layer function must have a unit test.
-10. **Migration discipline**: never edit migration files after they're created; create new migrations instead.
-11. **Environment parity**: local behavior must match AWS behavior; use the same code paths.
-12. **AI guardrails**: explicitly list what Claude/Cursor/Copilot must NOT do (e.g. no creating new patterns not in this document, no generating Lambda handlers that contain business logic).
+6. **No secrets in code**: use env vars, never hardcode.
+7. **TypeScript strict mode**: no `any`, no implicit returns, explicit types on all function signatures.
+8. **Error handling**: all errors bubble up as typed error objects or result types; no unhandled promise rejections.
+9. **Idempotency**: every write operation that accepts an `idempotencyKey` must enforce uniqueness.
+10. **Test coverage**: every service layer function must have a unit test.
+11. **Migration discipline**: never edit migration files after they're created; create new migrations instead.
+12. **Environment parity**: local behavior must match AWS behavior; use the same code paths.
+13. **AI guardrails**: explicitly list what Claude/Cursor/Copilot must NOT do (e.g. no creating new patterns not in this document, no generating Lambda handlers that contain business logic).
 
 ---
 
@@ -392,12 +408,14 @@ npm run dev
 **3. Architecture Rules** (the non-negotiables)
 ```markdown
 ## Architecture Rules
-- ALL business logic lives in `src/service/`. Lambda handlers only: parse input → call service → return result.
+- External HTTP/WebSocket traffic enters through one explicitly named gateway, for example `gateway/nest-http/` or `gateway/express/`.
+- Gateway code only parses transport input, validates/authenticates context, invokes typed service clients, and maps output.
+- ALL business logic lives in named `services/<bounded-context>/` service modules. Domain orchestration, repositories, DB access, transactions, and outbox publication stay in services.
 - Dispatch layer components (gateways/controllers/handlers/consumers/schedulers) are transport adapters only.
 - Multi-step orchestration belongs to service-layer use-case modules, not transport adapters.
-- ALL DB access goes through `src/db/queries/`. No Prisma calls outside this directory.
+- ALL DB access goes through typed repositories/query adapters in the owning service. No gateway/worker direct DB access.
 - Worker applications and transport adapters never open direct PostgreSQL/MongoDB/Redis connections; they call service APIs/contracts.
-- NEVER put domain logic, DB queries, or side effects in Lambda handlers.
+- NEVER put domain logic, DB queries, or side effects in gateway handlers or Lambda handlers.
 ```
 
 **4. Key Commands**
@@ -414,8 +432,10 @@ npm run dev
 **5. File Conventions**
 ```markdown
 ## File Conventions
-- Service layer: `src/service/{domain}.service.ts`
-- DB queries: `src/db/queries/{domain}.queries.ts`
+- Gateway: `gateway/<framework>-http/src/handlers/{domain}.handler.ts`
+- Gateway typed clients: `gateway/<framework>-http/src/clients/{domain}.service-client.ts`
+- Service layer: `services/<bounded-context>/src/service/{domain}.service.ts`
+- DB queries: `services/<bounded-context>/src/db/queries/{domain}.queries.ts`
 - Lambda handlers (API): `src/handlers/api/{domain}.handler.ts`
 - Lambda handlers (SQS): `src/handlers/sqs/{domain}.handler.ts`
 - Email templates: `src/emails/templates/{name}.hbs`
@@ -433,6 +453,9 @@ npm run dev
 - Do not modify existing migration files — create new ones
 - Do not use `any` type — use explicit TypeScript types
 ```
+- Do not name the sole external HTTP/BFF entrypoint ambiguously as `api-*` or `app-*`; use `gateway/<framework>-http/` or an equally explicit gateway name.
+- Do not place domain logic, database repositories, transactions, or outbox orchestration in gateway handlers.
+- Do not place transport routing or HTTP-specific types inside named service runtimes.
 
 **7. Environment Notes**
 ```markdown
@@ -480,5 +503,7 @@ A well-written `PROJECT.md` should be comprehensive enough that:
 7. Source, migrations, route shells, unit tests, and infrastructure declarations are never conflated with runtime-complete or production-ready status.
 8. DevOps, IaC, secrets, startup, health, rollback, backup/restore, and recovery are specified as implementation work rather than left implicit.
 9. A completion gate or implementation-status ledger distinguishes source-implemented, migration-added, scaffolded, unit-verified, integration-verified, runtime-verified, and pending work.
+10. The repository structure clearly separates the named external gateway from named domain services, and no ambiguous `api-*` or `app-*` directory is presented as the sole entrypoint.
+11. Gateway code contains transport concerns only; domain logic, repositories, transactions, and outbox orchestration are owned exclusively by named service runtimes.
 
 If any of these conditions isn't met, the document isn't done.

@@ -322,11 +322,21 @@ HotSpot uses a dispatch/service split:
 > ⚠ **Worker Data Boundary Rule**  
 > Worker applications are transport adapters and must not open direct PostgreSQL, MongoDB, or Redis connections. Workers consume events, call service APIs/contracts, and map outputs only. Database access is allowed exclusively inside service-layer applications and their repository/query modules.
 
-Dispatch examples for this repository: `apps/api-nest/src/handlers/**`, RabbitMQ consumer adapters, Stripe webhook endpoints, and scheduled-trigger adapters.
+Dispatch examples for this repository: `gateway/nest-http/src/handlers/**`, RabbitMQ consumer adapters, Stripe webhook endpoints, and scheduled-trigger adapters.
 
-Orchestration examples for this repository: auth registration/session lifecycle coordination in `apps/api-nest/src/service/**` use-case services.
+Orchestration examples for this repository: auth registration/session lifecycle coordination in auth-domain service modules and social/profile/post/media/story workflows in `services/social-nest/src/service/**` use-case services.
 
-Service-layer examples for this repository: `apps/api-nest/src/service/**`, Java entitlement domain services, and Python identity/media domain services.
+Service-layer examples for this repository: auth-domain services, `services/social-nest/src/**`, Java entitlement domain services, and Python identity/media domain services.
+
+The Nest HTTP application is a **gateway/BFF only**. It must not own PostgreSQL repositories, domain mutations, or outbox orchestration. It parses transport input, validates request shape and identity context, invokes typed service clients, and maps service results/errors.
+
+The social Nest service owns PostgreSQL repositories and social/profile/post/media/story domain orchestration. Auth must be an independent microservice with its own service contract and deployment boundary.
+
+Gateway client boundary rule:
+
+- The gateway must define one typed client per downstream microservice domain (for example: auth client, social client, entitlement client, media client).
+- Controllers call domain-specific clients only; they must not multiplex multiple domains through one catch-all client.
+- For protected downstream endpoints, gateway clients must forward required auth/context headers derived from gateway-authenticated request context (for example authorization token, actor id, role, correlation/request id).
 
 ## 4.2 Production Architecture
 
@@ -523,8 +533,8 @@ Application workloads also use Terraform-independent manifest annotations when H
 
 | Service | Namespace | Purpose | Initial Deployment Shape |
 |---|---|---|---|
-| HotSpot Web | `hotspot` | Next.js UI | 1 replica, CPU/RAM limits |
-| HotSpot API | `hotspot` | NestJS public/admin API | 1 replica |
+| HotSpot HTTP Gateway | `hotspot` | NestJS gateway/BFF dispatch entrypoint | 1 replica |
+| Social Domain Service | `hotspot` | NestJS auth/profile/posts/media/story domain service | 1 replica |
 | Identity Service | `hotspot` | Python verification/identity adapter | 1 replica + worker |
 | Entitlement Service | `hotspot` | Java Spring billing/entitlement domain | 1 replica |
 | Media Worker | `hotspot` | Python asset processing | 1 replica |
@@ -664,13 +674,20 @@ HotSpot/
   CHANGELOG.md
   docker-compose.yml
   package.json
+  gateway/
+    nest-http/                 # NestJS HTTP/BFF dispatch gateway only
+      src/
+        handlers/              # transport adapters: parse, authorize, call service, map response
+        clients/               # typed service clients/contracts
+        middleware/            # auth, rate limit, correlation IDs, request validation
   apps/
-    web/
-    api-nest/
+    web/                       # Next.js user-facing client
   services/
-    entitlement-spring/
-    identity-python/
-    media-python/
+    auth-nest/                 # authentication/session/passkey domain service
+    social-nest/               # profile, posts, media, stories, social domain service
+    entitlement-spring/        # billing, Stripe, trial, and entitlement domain service
+    identity-python/           # identity/verification domain service
+    media-python/              # media processing domain service
   workers/
     notification-node/
     cleanup-node/
@@ -749,7 +766,7 @@ type ServiceAction =
 |---|---|---|
 | Web | Next.js, React, TypeScript | responsive web UI and SSR |
 | State/API client | TanStack Query, typed OpenAPI client | server-state and API contracts |
-| Public API/BFF | NestJS + TypeScript | auth, social graph, posts, media API, WebSocket gateway |
+| Public API/BFF | NestJS + TypeScript | transport parsing, auth context, typed service clients, response mapping, WebSocket gateway |
 | Billing/entitlements | Java 21 Spring Boot | transactional billing, Stripe adapters, entitlement domain |
 | Verification/media | Python 3.12 FastAPI workers | provider adapters, asset processing, moderation helpers |
 | Relational DB | PostgreSQL + Prisma or typed SQL | canonical accounts, graph, posts, subscriptions, audits |
@@ -1411,6 +1428,57 @@ stripe listen --forward-to http://api.hotspot.local/v1/stripe/webhooks
 
 Implementation is divided into controlled, session-sized phases. No phase begins with its successor work unless explicitly required as a dependency.
 
+## 11.1 Architecture Reconciliation Baseline (2026-11-20)
+
+The implementation plan and current codebase have partial drift in completion semantics. To keep execution aligned with this document, use the following interpretation and controls:
+
+- A phase-level `[x]` item in this section means **implemented or scaffolded at service/domain level**, not runtime-complete feature delivery.
+- Runtime completion requires corresponding FR sub-items, deployment/runtime evidence, and the Runtime Completion Gate.
+- When status is mixed, record it explicitly as **implemented**, **scaffolded**, or **deferred** in phase notes and `CHANGELOG.md`.
+
+Current reconciliation snapshot:
+
+| Area | Current state | Reconciled status |
+|---|---|---|
+| Gateway dispatch boundary (`gateway/nest-http`) | Transport-only controllers and typed service client calls | Implemented |
+| Social domain business logic (`services/social-nest/src/service/**`) | Domain logic and repository orchestration exist for social/profile/post/media/story domains | Implemented |
+| Auth domain boundary (`gateway auth client + auth service`) | Gateway now uses dedicated auth client; auth service extraction is in progress | Scaffolded |
+| Phase 1-12 FR sub-item delivery | Many FR-specific route/runtime/deploy items remain unchecked | Deferred |
+| Runtime evidence parity for all phase claims | Partial and uneven across domains | Deferred |
+| NestJS idiomatic provider/module usage in social service | Present but mixed with composition factory patterns | Scaffolded |
+
+Microservices simplification decision:
+
+- Keep the dispatch/orchestration/service split as-is.
+- Prefer idiomatic NestJS DI/module composition for maintainability: `@Injectable()` services and explicit providers/modules over custom handler token objects where no special abstraction is required.
+- Allow deviation only when required for test isolation, cross-runtime portability, or measurable operational benefits, and document the rationale in phase notes.
+
+Required reconciliation tasks:
+
+- [x] Replace custom auth handler token wiring with direct NestJS injectable service injection in the social service.
+- [x] Replace manual gateway service-client object construction with NestJS provider/token wiring.
+- [x] Replace gateway auth-over-social client usage with a dedicated auth service client (`AUTH_SERVICE_URL`).
+- [ ] Extract auth runtime from social service into an independent auth microservice deployment and contract package boundary.
+- [ ] Add dedicated gateway clients for social, entitlement, media, and identity services and enforce header-forwarding adapters for protected downstream calls.
+- [ ] Migrate remaining domain composition factories in `services/social-nest/src/service/**` into explicit NestJS modules/providers without moving business logic out of service modules.
+- [ ] Add a phase-by-phase evidence matrix in `CHANGELOG.md` that labels each claim as implemented/scaffolded/deferred.
+- [ ] Do not mark FR sub-items complete until route/runtime/deploy evidence exists.
+
+## 11.2 Session Steering Protocol (Mandatory)
+
+All implementation sessions must run a steering loop using:
+
+- `.github/skills/session-steering/SKILL.md`
+- `.github/skills/session-steering/references/session-steering-checklist.md`
+
+Required checkpoints:
+
+- **Start Gate**: phase lock + skill lock + boundary lock before edits.
+- **In-Session Gate**: preserve dispatch/orchestration/service boundaries and reconcile drift as soon as detected.
+- **Exit Gate**: classify outcomes as implemented/scaffolded/deferred and update `CHANGELOG.md` with verification evidence, unresolved work, and next resume point.
+
+This protocol is required for all code, CI, and infrastructure sessions.
+
 ## Phase 0 — Workspace and Cluster Foundation
 
 - [x] Confirm SCM platform is in-cluster GitLab (`gitlab.rmwhs.com`)
@@ -1423,6 +1491,14 @@ Implementation is divided into controlled, session-sized phases. No phase begins
 - [x] Add `CLAUDE.md`
 - [x] Verify RabbitMQ vhost, credentials, and service DNS separately
 - [x] Verify local-path storage and disk capacity
+
+#### Phase 0 runtime evidence
+- [x] Add PostgreSQL, MongoDB, Redis, RabbitMQ, and Mailpit healthchecks and restart policies.
+- [x] Add repeatable `bootstrap:local`, `reset:local`, `reset:local:seed`, `db:migrate`, and `db:seed` root commands.
+- [x] Implement a forward-only local migration ledger for the Phase 1 foundation migration set.
+- [x] Implement deterministic local seed accounts for admin, creator, and viewer roles.
+- [x] Verify `npm run reset:local:seed` from fresh disposable volumes: core services healthy, 8 migrations applied, and 3 seed accounts inserted.
+- [ ] Verify MinIO startup once registry access provides a reachable object-storage image.
 
 Phase 0 note: current application `Service` and `Deployment` manifests include baseline Prometheus/OpenObserve labels/annotations.
 Phase 0 note: repository remote URL is configured and tracking `origin/master` at `gitlab.rmwhs.com/apps/hotspot.git`.
@@ -1437,6 +1513,7 @@ Phase 0 note: dev DNS now uses `rmwhs-dev.space` with wildcard `*.rmwhs-dev.spac
 - [x] Implement auth/user mutation outbox events (`user.created`, `user.updated`, `user.suspended`, `user.flagged`, `user.email-reset_requested`) at service scaffolding level
 - [x] Complete auth/user mutation outbox runtime integration tests
 - [x] Implement JWT/refresh service scaffolding
+
 - [x] Complete JWT/refresh composition wiring
 - [x] Complete JWT/refresh runtime integration tests
 - [x] Implement passkey/WebAuthn service scaffolding
